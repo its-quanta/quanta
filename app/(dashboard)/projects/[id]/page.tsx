@@ -1,7 +1,10 @@
+import { notFound } from "next/navigation";
+
 import { AppTopBar } from "@/components/layout/app-top-bar";
-import { PageHeader } from "@/components/layout/page-header";
+import { ProjectStatusBadge } from "@/components/projects/project-status-badge";
 import { ProjectWorkspaceTabs } from "@/components/projects/project-workspace-tabs";
-import { Badge } from "@/components/ui/badge";
+import { formatCurrency, formatDate } from "@/src/lib/format";
+import { getProjectById } from "@/src/lib/projects/queries";
 
 type ProjectPageProps = {
   params: Promise<{ id: string }>;
@@ -9,22 +12,45 @@ type ProjectPageProps = {
 
 export default async function ProjectPage({ params }: ProjectPageProps) {
   const { id } = await params;
+  const project = await getProjectById(id);
+
+  if (!project) {
+    notFound();
+  }
 
   return (
     <>
       <AppTopBar
-        title="Project workspace"
-        description={`Reference ${id.slice(0, 8)}…`}
+        title={project.name}
+        description={
+          [project.client_name, project.trade_scope].filter(Boolean).join(" · ") ||
+          "Tender workspace"
+        }
       />
       <main className="flex-1 overflow-y-auto p-6">
         <div className="mx-auto flex max-w-6xl flex-col gap-6">
-          <PageHeader
-            title="Project workspace"
-            description="Takeoff, pricing, clarifications, and export for this tender."
-            actions={<Badge variant="secondary">Draft</Badge>}
-          />
+          <header className="flex flex-col gap-3 border-b border-border pb-6 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Tender project</p>
+              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+                {project.name}
+              </h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {project.client_name ?? "No client set"}
+                {project.tender_due_date
+                  ? ` · Due ${formatDate(project.tender_due_date)}`
+                  : ""}
+              </p>
+            </div>
+            <div className="flex flex-col items-start gap-2 sm:items-end">
+              <ProjectStatusBadge status={project.status} />
+              <p className="font-mono text-sm tabular-nums text-muted-foreground">
+                Est. {formatCurrency(project.estimated_value)}
+              </p>
+            </div>
+          </header>
 
-          <ProjectWorkspaceTabs projectId={id} />
+          <ProjectWorkspaceTabs project={project} />
         </div>
       </main>
     </>

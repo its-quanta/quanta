@@ -6,16 +6,60 @@ Naming convention: `snake_case` tables and columns; UUID primary keys; `timestam
 
 ## Tenancy model
 
-Every business object is scoped to an **organisation**. A user belongs to one organisation in MVP (no team invitations yet).
+Every business object is scoped to an **organisation**. A user belongs to one organisation in MVP.
 
 ```
 auth.users
-    └── organisation_members (user_id, organisation_id, role)
+    └── profiles (id, organisation_id, role)
             └── organisations
                     └── [all project and settings data]
 ```
 
+### Profile roles
+
+| Role | Purpose |
+|------|---------|
+| `owner` | Created the organisation; full control |
+| `admin` | Manage team and settings (future) |
+| `estimator` | Create and edit tenders |
+| `viewer` | Read-only access (future) |
+
+Users without `organisation_id` must complete `/onboarding` before accessing the app.
+
 ## Core entities
+
+### profiles
+
+User profile linked to Supabase Auth.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | uuid | PK, FK → auth.users |
+| email | text | |
+| full_name | text | Optional until onboarding |
+| organisation_id | uuid | Nullable until onboarding complete |
+| role | text | Nullable until onboarding; `owner`, `admin`, `estimator`, `viewer` |
+| created_at, updated_at | timestamptz | |
+
+### organisation_invites
+
+Token-based invites for joining an organisation (MVP).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | uuid | PK |
+| organisation_id | uuid | FK |
+| token | text | Unique invite token |
+| email | text | Optional restrict to email |
+| role | text | `owner`, `admin`, `estimator`, `viewer` |
+| status | text | `pending`, `accepted`, `revoked`, `expired` |
+| invited_by | uuid | FK → auth.users |
+| expires_at | timestamptz | Optional |
+| accepted_at | timestamptz | |
+| accepted_by | uuid | FK → auth.users |
+| created_at, updated_at | timestamptz | |
+
+Invite acceptance is performed via secure server paths only.
 
 ### organisations
 

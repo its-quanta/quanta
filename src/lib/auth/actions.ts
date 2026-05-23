@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { ensureUserProfile } from "@/src/lib/auth/ensure-profile";
+import { ensureAuthProfile } from "@/src/lib/auth/ensure-profile";
+import { resolvePostAuthRedirect } from "@/src/lib/auth/redirect";
 import { createClient } from "@/src/lib/supabase/server";
 
 export type AuthActionState = {
@@ -54,7 +55,7 @@ export async function signInAction(
   }
 
   try {
-    await ensureUserProfile(data.user);
+    await ensureAuthProfile(data.user);
   } catch (profileError) {
     const message =
       profileError instanceof Error
@@ -64,7 +65,7 @@ export async function signInAction(
   }
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect(await resolvePostAuthRedirect(data.user.id));
 }
 
 export async function signUpAction(
@@ -74,7 +75,6 @@ export async function signUpAction(
   const email = normaliseEmail(String(formData.get("email") ?? ""));
   const password = String(formData.get("password") ?? "");
   const fullName = String(formData.get("fullName") ?? "").trim();
-  const organisationName = String(formData.get("organisationName") ?? "").trim();
 
   if (!email || !password) {
     return { error: "Email and password are required." };
@@ -97,7 +97,6 @@ export async function signUpAction(
       emailRedirectTo: `${getSiteUrl()}/auth/callback`,
       data: {
         full_name: fullName,
-        organisation_name: organisationName || undefined,
       },
     },
   });
@@ -118,7 +117,7 @@ export async function signUpAction(
   }
 
   try {
-    await ensureUserProfile(data.user);
+    await ensureAuthProfile(data.user);
   } catch (profileError) {
     const message =
       profileError instanceof Error
@@ -128,7 +127,7 @@ export async function signUpAction(
   }
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect(await resolvePostAuthRedirect(data.user.id));
 }
 
 export async function signOutAction(): Promise<void> {

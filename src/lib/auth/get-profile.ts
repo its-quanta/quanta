@@ -1,20 +1,25 @@
 import { createClient } from "@/src/lib/supabase/server";
 import type { Profile } from "@/src/types/database";
 
+import {
+  normalizeProfile,
+  queryProfileRow,
+} from "@/src/lib/auth/profile-schema";
+
 export async function getProfileForUser(
   userId: string
 ): Promise<Profile | null> {
   const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, email, full_name, organisation_id, role, created_at, updated_at")
-    .eq("id", userId)
-    .maybeSingle();
+  const { row, error } = await queryProfileRow(supabase, userId);
 
   if (error) {
-    throw new Error(error.message);
+    console.error("getProfileForUser:", error);
+    return null;
   }
 
-  return (data as Profile | null) ?? null;
+  if (!row) {
+    return null;
+  }
+
+  return normalizeProfile(row);
 }

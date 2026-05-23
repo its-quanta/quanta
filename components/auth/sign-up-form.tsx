@@ -30,21 +30,6 @@ export function SignUpForm() {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="organisationName">Organisation name</Label>
-        <Input
-          id="organisationName"
-          name="organisationName"
-          type="text"
-          autoComplete="organization"
-          placeholder="Morgan Joinery Ltd"
-        />
-        <p className="text-xs text-muted-foreground">
-          Used for your default organisation workspace. You can change this
-          later.
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
         <Label htmlFor="email">Email</Label>
         <Input
           id="email"
@@ -84,6 +69,10 @@ export function SignUpForm() {
       <Button type="submit" className="h-9 w-full" disabled={isPending}>
         {isPending ? "Creating account…" : "Create account"}
       </Button>
+
+      <p className="text-xs text-muted-foreground">
+        After sign up you will set up or join an organisation.
+      </p>
     </form>
   );
 }

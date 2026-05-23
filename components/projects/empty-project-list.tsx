@@ -11,7 +11,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export function EmptyProjectList() {
+type EmptyProjectListProps = {
+  message?: string;
+};
+
+export function EmptyProjectList({
+  message = "Create your first tender project to start building structured takeoffs, pricing schedules and exclusions.",
+}: EmptyProjectListProps) {
   return (
     <Card>
       <CardHeader className="items-center text-center">
@@ -23,10 +29,7 @@ export function EmptyProjectList() {
           />
         </div>
         <CardTitle className="text-lg">No projects yet</CardTitle>
-        <CardDescription className="max-w-sm">
-          Create your first tender estimate. Upload drawings, build takeoffs,
-          and price the job in one workspace.
-        </CardDescription>
+        <CardDescription className="max-w-md">{message}</CardDescription>
       </CardHeader>
       <CardContent className="flex justify-center pb-6">
         <Button asChild size="lg">

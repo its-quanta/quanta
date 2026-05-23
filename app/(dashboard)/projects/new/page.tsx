@@ -2,7 +2,7 @@ import { AppTopBar } from "@/components/layout/app-top-bar";
 import { PageHeader } from "@/components/layout/page-header";
 import { CreateProjectForm } from "@/components/projects/create-project-form";
 
-export default async function NewProjectPage() {
+export default function NewProjectPage() {
   return (
     <>
       <AppTopBar
@@ -13,7 +13,7 @@ export default async function NewProjectPage() {
         <div className="mx-auto flex max-w-6xl flex-col gap-8">
           <PageHeader
             title="Create project"
-            description="Start a new tender estimate. Fields will save once the projects database is connected."
+            description="Start a new tender estimate for your organisation."
           />
           <CreateProjectForm />
         </div>

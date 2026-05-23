@@ -1,8 +1,10 @@
+import "server-only";
+
 import { createClient } from "@supabase/supabase-js";
 
 /**
- * Service-role client for secure server-only onboarding paths.
- * Never import this module from client components.
+ * Service-role client for secure server-only admin paths.
+ * Not required for standard onboarding — use only when RLS/RPC is insufficient.
  */
 export function createAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -10,7 +12,7 @@ export function createAdminClient() {
 
   if (!url || !serviceRoleKey) {
     throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY."
+      "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Add SUPABASE_SERVICE_ROLE_KEY to .env.local (Supabase → Settings → API → service_role)."
     );
   }
 

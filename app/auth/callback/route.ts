@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { ensureUserProfile } from "@/src/lib/auth/ensure-profile";
+import { ensureAuthProfile } from "@/src/lib/auth/ensure-profile";
+import { resolvePostAuthRedirect } from "@/src/lib/auth/redirect";
 import { createClient } from "@/src/lib/supabase/server";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login`);
@@ -21,10 +21,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    await ensureUserProfile(data.user);
+    await ensureAuthProfile(data.user);
   } catch {
     return NextResponse.redirect(`${origin}/login`);
   }
 
-  return NextResponse.redirect(`${origin}${next}`);
+  const destination = await resolvePostAuthRedirect(data.user.id);
+  return NextResponse.redirect(`${origin}${destination}`);
 }

@@ -3,9 +3,15 @@ import Link from "next/link";
 import { AppTopBar } from "@/components/layout/app-top-bar";
 import { PageHeader } from "@/components/layout/page-header";
 import { EmptyProjectList } from "@/components/projects/empty-project-list";
+import { ProjectTable } from "@/components/projects/project-table";
 import { Button } from "@/components/ui/button";
+import { requireOrganisationProfile } from "@/src/lib/auth/require-profile";
+import { getProjectsForOrganisation } from "@/src/lib/projects/queries";
 
 export default async function ProjectsPage() {
+  const { profile } = await requireOrganisationProfile();
+  const projects = await getProjectsForOrganisation(profile.organisation_id);
+
   return (
     <>
       <AppTopBar
@@ -24,7 +30,11 @@ export default async function ProjectsPage() {
             }
           />
 
-          <EmptyProjectList />
+          {projects.length === 0 ? (
+            <EmptyProjectList />
+          ) : (
+            <ProjectTable projects={projects} />
+          )}
         </div>
       </main>
     </>

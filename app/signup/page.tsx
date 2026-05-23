@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { AuthShell } from "@/components/auth/auth-shell";
 import { SignUpForm } from "@/components/auth/sign-up-form";
+import { resolvePostAuthRedirect } from "@/src/lib/auth/redirect";
 import { createClient } from "@/src/lib/supabase/server";
 
 export default async function SignUpPage() {
@@ -11,15 +12,15 @@ export default async function SignUpPage() {
   } = await supabase.auth.getUser();
 
   if (user) {
-    redirect("/dashboard");
+    redirect(await resolvePostAuthRedirect(user.id));
   }
 
   return (
     <AuthShell
       title="Create your Quanta account"
-      description="Set up your organisation workspace for tender estimating."
+      description="Estimating and tender workspace for subcontractors."
       cardTitle="New account"
-      cardDescription="Create an owner account for your organisation. You stay in control of every quantity."
+      cardDescription="Create your account, then set up or join an organisation."
       footerLink={{
         label: "Already have an account?",
         href: "/login",

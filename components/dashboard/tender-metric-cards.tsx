@@ -1,31 +1,13 @@
+import type { DashboardMetric } from "@/src/lib/dashboard/stats";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-const metrics = [
-  {
-    label: "Live bids",
-    value: "—",
-    hint: "Active tender projects",
-  },
-  {
-    label: "Estimated value",
-    value: "—",
-    hint: "Total sell price in pipeline",
-  },
-  {
-    label: "Due this week",
-    value: "—",
-    hint: "Tenders with upcoming deadlines",
-  },
-  {
-    label: "Open RFIs",
-    value: "—",
-    hint: "Clarifications awaiting response",
-  },
-] as const;
+type TenderMetricCardsProps = {
+  metrics: DashboardMetric[];
+};
 
-export function DashboardMetricCards() {
+export function TenderMetricCards({ metrics }: TenderMetricCardsProps) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {metrics.map((metric) => (
         <Card key={metric.label} size="sm">
           <CardHeader className="pb-0">
