@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 
+import { AuthProfileProvider } from "@/components/layout/auth-profile-provider";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
+import { ensureUserProfile } from "@/src/lib/auth/ensure-profile";
 import { createClient } from "@/src/lib/supabase/server";
 
 export default async function DashboardLayout({
@@ -17,7 +19,19 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  return <DashboardShell>{children}</DashboardShell>;
+  let profile;
+
+  try {
+    profile = await ensureUserProfile(user);
+  } catch {
+    redirect("/login");
+  }
+
+  return (
+    <AuthProfileProvider profile={profile}>
+      <DashboardShell>{children}</DashboardShell>
+    </AuthProfileProvider>
+  );
 }
 
 export async function generateMetadata() {

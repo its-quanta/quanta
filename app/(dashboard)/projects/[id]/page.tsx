@@ -2,7 +2,6 @@ import { AppTopBar } from "@/components/layout/app-top-bar";
 import { PageHeader } from "@/components/layout/page-header";
 import { ProjectWorkspaceTabs } from "@/components/projects/project-workspace-tabs";
 import { Badge } from "@/components/ui/badge";
-import { createClient } from "@/src/lib/supabase/server";
 
 type ProjectPageProps = {
   params: Promise<{ id: string }>;
@@ -10,17 +9,12 @@ type ProjectPageProps = {
 
 export default async function ProjectPage({ params }: ProjectPageProps) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   return (
     <>
       <AppTopBar
         title="Project workspace"
         description={`Reference ${id.slice(0, 8)}…`}
-        userEmail={user?.email}
       />
       <main className="flex-1 overflow-y-auto p-6">
         <div className="mx-auto flex max-w-6xl flex-col gap-6">

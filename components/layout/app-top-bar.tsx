@@ -1,18 +1,18 @@
+"use client";
+
 import { SignOutButton } from "@/components/auth/sign-out-button";
+import { useAuthProfile } from "@/components/layout/auth-profile-provider";
 
 type AppTopBarProps = {
   title: string;
   description?: string;
-  userEmail?: string | null;
   actions?: React.ReactNode;
 };
 
-export function AppTopBar({
-  title,
-  description,
-  userEmail,
-  actions,
-}: AppTopBarProps) {
+export function AppTopBar({ title, description, actions }: AppTopBarProps) {
+  const profile = useAuthProfile();
+  const displayName = profile?.full_name ?? profile?.email;
+
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-6">
       <div className="min-w-0">
@@ -26,9 +26,9 @@ export function AppTopBar({
 
       <div className="flex items-center gap-3">
         {actions}
-        {userEmail ? (
-          <span className="hidden text-xs text-muted-foreground sm:inline">
-            {userEmail}
+        {displayName ? (
+          <span className="hidden max-w-[180px] truncate text-xs text-muted-foreground sm:inline">
+            {displayName}
           </span>
         ) : null}
         <SignOutButton />

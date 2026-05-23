@@ -1,9 +1,5 @@
-"use client";
-
-import { useRouter } from "next/navigation";
-
+import { signOutAction } from "@/src/lib/auth/actions";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/src/lib/supabase/client";
 
 type SignOutButtonProps = {
   variant?: "default" | "outline" | "ghost" | "secondary";
@@ -14,18 +10,11 @@ export function SignOutButton({
   variant = "ghost",
   size = "sm",
 }: SignOutButtonProps) {
-  const router = useRouter();
-
-  async function handleSignOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  }
-
   return (
-    <Button type="button" variant={variant} size={size} onClick={handleSignOut}>
-      Sign out
-    </Button>
+    <form action={signOutAction}>
+      <Button type="submit" variant={variant} size={size}>
+        Sign out
+      </Button>
+    </form>
   );
 }
