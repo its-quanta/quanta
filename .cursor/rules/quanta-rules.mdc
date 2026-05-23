@@ -1,3 +1,26 @@
 ---
 alwaysApply: true
 ---
+You are building Quanta, an AI-assisted estimating and tender workspace for small contractors and subcontractors.
+
+Tech stack:
+- Next.js App Router
+- TypeScript
+- Tailwind CSS
+- Shadcn UI
+- Supabase
+- PostgreSQL
+- Supabase Auth
+- Supabase Storage
+- Vercel
+
+Rules:
+- Use strict TypeScript.
+- Build reusable components.
+- Do not expose API keys in frontend code.
+- Do not use mock data if real Supabase data is available.
+- Do not change unrelated files.
+- Always preserve organisation-level data separation.
+- AI outputs are draft only until reviewed by the user.
+- Keep the UX clean, modern, premium and subcontractor-focused.
+- Use British English spelling.
