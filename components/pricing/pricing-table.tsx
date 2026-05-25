@@ -6,6 +6,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Add01Icon, Delete02Icon, Edit02Icon } from "@hugeicons/core-free-icons";
 
 import { EditPricingItemDialog } from "@/components/pricing/edit-pricing-item-dialog";
+import { LinkStandardsDialog } from "@/components/standards/link-standards-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,13 +37,29 @@ import {
   formatPricingSourceShort,
 } from "@/src/lib/pricing/pricing-source";
 import type { PricingItemWithTakeoff } from "@/src/lib/pricing/queries";
-import type { TakeoffItemAssemblyWithPackage } from "@/src/types/database";
+import type {
+  Standard,
+  StandardLinkWithStandard,
+  TakeoffItemAssemblyWithPackage,
+} from "@/src/types/database";
+
+function filterLinksForPricing(
+  links: StandardLinkWithStandard[],
+  pricingItemId: string
+): StandardLinkWithStandard[] {
+  return links.filter(
+    (link) =>
+      link.entity_type === "pricing_item" && link.entity_id === pricingItemId
+  );
+}
 import { formatCurrency, formatPercent } from "@/src/lib/format";
 
 type PricingTableProps = {
   projectId: string;
   pricingItems: PricingItemWithTakeoff[];
   takeoffAssemblies: TakeoffItemAssemblyWithPackage[];
+  organisationStandards: Standard[];
+  projectStandardLinks: StandardLinkWithStandard[];
   onAddPricing: () => void;
 };
 
@@ -57,6 +74,8 @@ export function PricingTable({
   projectId,
   pricingItems: initialItems,
   takeoffAssemblies,
+  organisationStandards,
+  projectStandardLinks,
   onAddPricing,
 }: PricingTableProps) {
   const router = useRouter();
@@ -68,6 +87,8 @@ export function PricingTable({
   const [deleteTarget, setDeleteTarget] = useState<PricingItemWithTakeoff | null>(
     null
   );
+  const [linkStandardsTarget, setLinkStandardsTarget] =
+    useState<PricingItemWithTakeoff | null>(null);
 
   const assemblyByTakeoffId = useMemo(
     () =>
@@ -278,6 +299,12 @@ export function PricingTable({
                           Edit
                         </DropdownMenuItem>
                         <DropdownMenuItem
+                          onClick={() => setLinkStandardsTarget(item)}
+                          disabled={organisationStandards.length === 0}
+                        >
+                          Link standards
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
                           variant="destructive"
                           onClick={() => setDeleteTarget(item)}
                         >
@@ -297,6 +324,32 @@ export function PricingTable({
           </Table>
         </div>
       )}
+
+      <LinkStandardsDialog
+        open={linkStandardsTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setLinkStandardsTarget(null);
+          }
+        }}
+        entityType="pricing_item"
+        entityId={linkStandardsTarget?.id ?? ""}
+        entityLabel={
+          linkStandardsTarget
+            ? `${linkStandardsTarget.takeoff_item.item_name} pricing`
+            : "pricing line"
+        }
+        projectId={projectId}
+        links={
+          linkStandardsTarget
+            ? filterLinksForPricing(
+                projectStandardLinks,
+                linkStandardsTarget.id
+              )
+            : []
+        }
+        availableStandards={organisationStandards}
+      />
 
       <EditPricingItemDialog
         projectId={projectId}

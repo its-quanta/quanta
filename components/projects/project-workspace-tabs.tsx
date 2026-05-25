@@ -15,12 +15,14 @@ import { ProjectDocumentsPanel } from "@/components/documents/project-documents-
 import { ProjectLabourPanel } from "@/components/labour/project-labour-panel";
 import { ProjectMaterialsPanel } from "@/components/materials/project-materials-panel";
 import { ProjectPricingPanel } from "@/components/pricing/project-pricing-panel";
+import { ProjectScopeGapsCard } from "@/components/scope-gaps/project-scope-gaps-card";
 import { ProjectReadinessSummary } from "@/components/projects/project-readiness-summary";
 import { ProjectTakeoffPanel } from "@/components/takeoff/project-takeoff-panel";
 import { ProjectStatusBadge } from "@/components/projects/project-status-badge";
 import { formatCurrency, formatDate } from "@/src/lib/format";
 import { computeProjectReadiness } from "@/src/lib/projects/readiness";
 import type { PricingItemWithTakeoff } from "@/src/lib/pricing/queries";
+import type { ScopeGapSummary } from "@/src/lib/scope-gaps/types";
 import type {
   AssemblyPackage,
   Document,
@@ -29,6 +31,8 @@ import type {
   Project,
   ProjectLabourItem,
   ProjectMaterialItem,
+  Standard,
+  StandardLinkWithStandard,
   TakeoffItem,
   TakeoffItemAssemblyWithPackage,
 } from "@/src/types/database";
@@ -64,6 +68,9 @@ type ProjectWorkspaceTabsProps = {
   materialItems: ProjectMaterialItem[];
   labourItems: ProjectLabourItem[];
   estimateLoadError: string | null;
+  scopeGapSummary: ScopeGapSummary;
+  organisationStandards: Standard[];
+  projectStandardLinks: StandardLinkWithStandard[];
 };
 
 function TabEmptyState({
@@ -160,6 +167,9 @@ export function ProjectWorkspaceTabs({
   materialItems,
   labourItems,
   estimateLoadError,
+  scopeGapSummary,
+  organisationStandards,
+  projectStandardLinks,
 }: ProjectWorkspaceTabsProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -196,7 +206,10 @@ export function ProjectWorkspaceTabs({
   }, [priceTakeoffParam]);
 
   const navigateTab = useCallback(
-    (tab: WorkspaceTabValue, options?: { priceTakeoff?: string }) => {
+    (
+      tab: WorkspaceTabValue,
+      options?: { priceTakeoff?: string }
+    ) => {
       setActiveTab(tab);
       const params = new URLSearchParams();
       if (tab !== "overview") {
@@ -214,6 +227,17 @@ export function ProjectWorkspaceTabs({
     [project.id, router]
   );
 
+  function handleScopeGapNavigate(tab: string, takeoffId?: string) {
+    if (!isWorkspaceTab(tab)) {
+      return;
+    }
+    if (tab === "pricing" && takeoffId) {
+      navigateTab(tab, { priceTakeoff: takeoffId });
+      return;
+    }
+    navigateTab(tab);
+  }
+
   function handlePriceManual(takeoffItemId: string) {
     setPricingTakeoffId(takeoffItemId);
     navigateTab("pricing", { priceTakeoff: takeoffItemId });
@@ -226,6 +250,14 @@ export function ProjectWorkspaceTabs({
 
   return (
     <div className="flex flex-col gap-4">
+      <ProjectScopeGapsCard
+        projectId={project.id}
+        totalGaps={scopeGapSummary.totalGaps}
+        byKind={scopeGapSummary.byKind}
+        gaps={scopeGapSummary.gaps}
+        onNavigateTab={handleScopeGapNavigate}
+      />
+
       <ProjectReadinessSummary counts={readiness} />
 
       <Tabs
@@ -266,6 +298,8 @@ export function ProjectWorkspaceTabs({
             assemblyPackages={assemblyPackages}
             takeoffAssemblies={takeoffAssemblies}
             pricingItems={pricingItemsPlain}
+            organisationStandards={organisationStandards}
+            projectStandardLinks={projectStandardLinks}
             onPriceManual={handlePriceManual}
           />
         </TabsContent>
@@ -293,6 +327,8 @@ export function ProjectWorkspaceTabs({
             takeoffAssemblies={takeoffAssemblies}
             assemblyPackages={assemblyPackages}
             pricingItemsPlain={pricingItemsPlain}
+            organisationStandards={organisationStandards}
+            projectStandardLinks={projectStandardLinks}
             initialTakeoffItemId={pricingTakeoffId}
             onInitialTakeoffConsumed={clearPricingTakeoffParam}
           />

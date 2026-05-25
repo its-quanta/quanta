@@ -19,6 +19,7 @@ import {
 } from "@hugeicons/core-free-icons";
 
 import { AddTakeoffItemDialog } from "@/components/takeoff/add-takeoff-item-dialog";
+import { LinkStandardsDialog } from "@/components/standards/link-standards-dialog";
 import { ApplyPackageDialog } from "@/components/takeoff/apply-package-dialog";
 import { EditTakeoffItemDialog } from "@/components/takeoff/edit-takeoff-item-dialog";
 import { TakeoffStatusBadge } from "@/components/takeoff/takeoff-status-badge";
@@ -71,9 +72,21 @@ import type {
   Document,
   DocumentPage,
   PricingItem,
+  Standard,
+  StandardLinkWithStandard,
   TakeoffItem,
   TakeoffItemAssemblyWithPackage,
 } from "@/src/types/database";
+
+function filterLinksForTakeoff(
+  links: StandardLinkWithStandard[],
+  takeoffItemId: string
+): StandardLinkWithStandard[] {
+  return links.filter(
+    (link) =>
+      link.entity_type === "takeoff_item" && link.entity_id === takeoffItemId
+  );
+}
 
 type TakeoffTableProps = {
   projectId: string;
@@ -83,6 +96,8 @@ type TakeoffTableProps = {
   assemblyPackages: AssemblyPackage[];
   takeoffAssemblies: TakeoffItemAssemblyWithPackage[];
   pricingItems: PricingItem[];
+  organisationStandards: Standard[];
+  projectStandardLinks: StandardLinkWithStandard[];
   onPriceManual?: (takeoffItemId: string) => void;
 };
 
@@ -94,6 +109,8 @@ export function TakeoffTable({
   assemblyPackages,
   takeoffAssemblies,
   pricingItems,
+  organisationStandards,
+  projectStandardLinks,
   onPriceManual,
 }: TakeoffTableProps) {
   const router = useRouter();
@@ -106,6 +123,9 @@ export function TakeoffTable({
   const [editItem, setEditItem] = useState<TakeoffItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TakeoffItem | null>(null);
   const [applyPackageItem, setApplyPackageItem] = useState<TakeoffItem | null>(
+    null
+  );
+  const [linkStandardsItem, setLinkStandardsItem] = useState<TakeoffItem | null>(
     null
   );
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
@@ -380,6 +400,12 @@ export function TakeoffTable({
                   Price manual
                 </DropdownMenuItem>
               ) : null}
+              <DropdownMenuItem
+                onClick={() => setLinkStandardsItem(row.original)}
+                disabled={organisationStandards.length === 0}
+              >
+                Link standards
+              </DropdownMenuItem>
               {row.original.reviewed ? (
                 <DropdownMenuItem
                   onClick={() => runRowAction(row.original.id, () =>
@@ -425,6 +451,7 @@ export function TakeoffTable({
       drawingContext,
       isPending,
       onPriceManual,
+      organisationStandards.length,
       pendingRowId,
       pricingByTakeoffId,
       projectId,
@@ -580,6 +607,25 @@ export function TakeoffTable({
         open={addDialogOpen}
         onOpenChange={setAddDialogOpen}
         onSuccess={setSuccessMessage}
+      />
+
+      <LinkStandardsDialog
+        open={Boolean(linkStandardsItem)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setLinkStandardsItem(null);
+          }
+        }}
+        entityType="takeoff_item"
+        entityId={linkStandardsItem?.id ?? ""}
+        entityLabel={linkStandardsItem?.item_name ?? "takeoff line"}
+        projectId={projectId}
+        links={
+          linkStandardsItem
+            ? filterLinksForTakeoff(projectStandardLinks, linkStandardsItem.id)
+            : []
+        }
+        availableStandards={organisationStandards}
       />
 
       <ApplyPackageDialog

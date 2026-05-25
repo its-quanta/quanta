@@ -510,3 +510,60 @@ export type ProjectLabourItem = {
   reviewed: boolean;
   created_at: string;
 };
+
+export type StandardType =
+  | "nz_standard"
+  | "building_code"
+  | "specification"
+  | "manufacturer_guide"
+  | "drawing"
+  | "custom";
+
+export type StandardLinkEntityType =
+  | "takeoff_item"
+  | "assembly_package"
+  | "pricing_item";
+
+export type Standard = {
+  id: string;
+  organisation_id: string;
+  reference_code: string;
+  name: string;
+  standard_type: StandardType;
+  trade: string | null;
+  jurisdiction: string | null;
+  description: string | null;
+  notes: string | null;
+  source_url: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type StandardInput = {
+  reference_code: string;
+  name: string;
+  standard_type?: StandardType;
+  trade?: string | null;
+  jurisdiction?: string | null;
+  description?: string | null;
+  notes?: string | null;
+  source_url?: string | null;
+  is_active?: boolean;
+};
+
+export type StandardUpdate = Partial<StandardInput>;
+
+export type StandardLink = {
+  id: string;
+  organisation_id: string;
+  standard_id: string;
+  entity_type: StandardLinkEntityType;
+  entity_id: string;
+  project_id: string | null;
+  created_at: string;
+};
+
+export type StandardLinkWithStandard = StandardLink & {
+  standard: Standard;
+};

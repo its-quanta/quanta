@@ -12,6 +12,8 @@ import type {
   Document,
   DocumentPage,
   PricingItem,
+  Standard,
+  StandardLinkWithStandard,
   TakeoffItem,
   TakeoffItemAssemblyWithPackage,
 } from "@/src/types/database";
@@ -24,6 +26,8 @@ type ProjectTakeoffPanelProps = {
   assemblyPackages: AssemblyPackage[];
   takeoffAssemblies: TakeoffItemAssemblyWithPackage[];
   pricingItems: PricingItem[];
+  organisationStandards: Standard[];
+  projectStandardLinks: StandardLinkWithStandard[];
   onPriceManual?: (takeoffItemId: string) => void;
 };
 
@@ -35,6 +39,8 @@ export function ProjectTakeoffPanel({
   assemblyPackages,
   takeoffAssemblies,
   pricingItems,
+  organisationStandards,
+  projectStandardLinks,
   onPriceManual,
 }: ProjectTakeoffPanelProps) {
   return (
@@ -58,6 +64,8 @@ export function ProjectTakeoffPanel({
             assemblyPackages={assemblyPackages}
             takeoffAssemblies={takeoffAssemblies}
             pricingItems={pricingItems}
+            organisationStandards={organisationStandards}
+            projectStandardLinks={projectStandardLinks}
             onPriceManual={onPriceManual}
           />
         </CardContent>

@@ -5,6 +5,10 @@ import { AssemblyDetailWorkspace } from "@/components/assemblies/assembly-detail
 import { AppTopBar } from "@/components/layout/app-top-bar";
 import { requireOrganisationProfile } from "@/src/lib/auth/require-profile";
 import { getAssemblyPackageDetail } from "@/src/lib/assemblies/queries";
+import {
+  getStandardLinksForEntity,
+  getStandardsForOrganisation,
+} from "@/src/lib/standards/queries";
 
 type AssemblyDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -16,10 +20,18 @@ export default async function AssemblyDetailPage({
   const { profile } = await requireOrganisationProfile();
   const { id } = await params;
 
-  const { assemblyPackage, items } = await getAssemblyPackageDetail(
-    id,
-    profile.organisation_id
-  );
+  const [{ assemblyPackage, items }, organisationStandards, assemblyStandardLinks] =
+    await Promise.all([
+      getAssemblyPackageDetail(id, profile.organisation_id),
+      getStandardsForOrganisation(profile.organisation_id, {
+        activeOnly: true,
+      }),
+      getStandardLinksForEntity(
+        "assembly_package",
+        id,
+        profile.organisation_id
+      ),
+    ]);
 
   if (!assemblyPackage) {
     notFound();
@@ -44,6 +56,8 @@ export default async function AssemblyDetailPage({
           <AssemblyDetailWorkspace
             assemblyPackage={assemblyPackage}
             items={items}
+            organisationStandards={organisationStandards}
+            assemblyStandardLinks={assemblyStandardLinks}
           />
         </div>
       </main>

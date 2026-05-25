@@ -8,8 +8,10 @@ import { RatesHealthSection } from "@/components/dashboard/rates-health-section"
 import { TenderCommandHeader } from "@/components/dashboard/tender-command-header";
 import { TenderMetricCards } from "@/components/dashboard/tender-metric-cards";
 import { UpcomingDeadlinesSection } from "@/components/dashboard/upcoming-deadlines-section";
+import { ScopeGapsDashboardWidget } from "@/components/scope-gaps/scope-gaps-dashboard-widget";
 import { getTakeoffSummaryForOrganisation } from "@/src/lib/dashboard/queries";
 import { buildTenderCommandCentreData } from "@/src/lib/dashboard/stats";
+import { getOrganisationScopeGapSummary } from "@/src/lib/scope-gaps/queries";
 import { requireOrganisationProfile } from "@/src/lib/auth/require-profile";
 import { getProjectsForOrganisation } from "@/src/lib/projects/queries";
 import { getRateLibrarySummary } from "@/src/lib/rates/queries";
@@ -18,13 +20,20 @@ export default async function DashboardPage() {
   const { profile } = await requireOrganisationProfile();
   const organisationId = profile.organisation_id;
 
-  const [projects, takeoffRows, rateSummary] = await Promise.all([
-    getProjectsForOrganisation(organisationId),
-    getTakeoffSummaryForOrganisation(organisationId),
-    getRateLibrarySummary(organisationId),
-  ]);
+  const [projects, takeoffRows, rateSummary, scopeGapSummary] =
+    await Promise.all([
+      getProjectsForOrganisation(organisationId),
+      getTakeoffSummaryForOrganisation(organisationId),
+      getRateLibrarySummary(organisationId),
+      getOrganisationScopeGapSummary(organisationId),
+    ]);
 
-  const data = buildTenderCommandCentreData(projects, takeoffRows, rateSummary);
+  const data = buildTenderCommandCentreData(
+    projects,
+    takeoffRows,
+    rateSummary,
+    scopeGapSummary
+  );
   const welcomeName = profile.full_name?.split(" ")[0] ?? "there";
 
   return (
@@ -42,6 +51,13 @@ export default async function DashboardPage() {
             description="Active pipeline value, pricing progress, and scope gaps."
           >
             <TenderMetricCards metrics={data.pipelineMetrics} />
+          </DashboardSection>
+
+          <DashboardSection
+            title="Scope gap engine"
+            description="Automated checks for package, pricing, materials, labour, drawings, and standards."
+          >
+            <ScopeGapsDashboardWidget summary={scopeGapSummary} />
           </DashboardSection>
 
           <DashboardSection

@@ -23,6 +23,8 @@ import {
 import type {
   AssemblyPackage,
   PricingItem,
+  Standard,
+  StandardLinkWithStandard,
   TakeoffItem,
   TakeoffItemAssemblyWithPackage,
 } from "@/src/types/database";
@@ -34,6 +36,8 @@ type ProjectPricingPanelProps = {
   takeoffAssemblies: TakeoffItemAssemblyWithPackage[];
   assemblyPackages: AssemblyPackage[];
   pricingItemsPlain: PricingItem[];
+  organisationStandards: Standard[];
+  projectStandardLinks: StandardLinkWithStandard[];
   initialTakeoffItemId?: string | null;
   onInitialTakeoffConsumed?: () => void;
 };
@@ -45,6 +49,8 @@ export function ProjectPricingPanel({
   takeoffAssemblies,
   assemblyPackages,
   pricingItemsPlain,
+  organisationStandards,
+  projectStandardLinks,
   initialTakeoffItemId,
   onInitialTakeoffConsumed,
 }: ProjectPricingPanelProps) {
@@ -126,6 +132,8 @@ export function ProjectPricingPanel({
             projectId={projectId}
             pricingItems={pricingItems}
             takeoffAssemblies={takeoffAssemblies}
+            organisationStandards={organisationStandards}
+            projectStandardLinks={projectStandardLinks}
             onAddPricing={() => openAddPricing()}
           />
         </CardContent>

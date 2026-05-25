@@ -10,6 +10,11 @@ import { getDocumentsForProject } from "@/src/lib/documents/queries";
 import { getActiveAssemblyPackagesForOrganisation } from "@/src/lib/assemblies/queries";
 import { getPricingItemsForProject } from "@/src/lib/pricing/queries";
 import { getProjectEstimateItems } from "@/src/lib/estimate-generation/queries";
+import { getProjectScopeGapSummary } from "@/src/lib/scope-gaps/queries";
+import {
+  getStandardLinksWithStandardsForProject,
+  getStandardsForOrganisation,
+} from "@/src/lib/standards/queries";
 import { getTakeoffItemAssembliesForProject } from "@/src/lib/takeoff-assembly/queries";
 import { getTakeoffItemsForProject } from "@/src/lib/takeoff/queries";
 import { requireOrganisationProfile } from "@/src/lib/auth/require-profile";
@@ -36,6 +41,9 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     assemblyPackages,
     takeoffAssemblies,
     estimateData,
+    scopeGapSummary,
+    organisationStandards,
+    projectStandardLinks,
   ] = await Promise.all([
     getDocumentsForProject(project.id, profile.organisation_id),
     getDocumentPagesForProject(project.id, profile.organisation_id),
@@ -47,6 +55,14 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       profile.organisation_id
     ),
     getProjectEstimateItems(project.id, profile.organisation_id),
+    getProjectScopeGapSummary(project.id, profile.organisation_id),
+    getStandardsForOrganisation(profile.organisation_id, {
+      activeOnly: true,
+    }),
+    getStandardLinksWithStandardsForProject(
+      project.id,
+      profile.organisation_id
+    ),
   ]);
 
   const { materialItems, labourItems, loadError: estimateLoadError } =
@@ -108,6 +124,9 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
               materialItems={materialItems}
               labourItems={labourItems}
               estimateLoadError={estimateLoadError}
+              scopeGapSummary={scopeGapSummary}
+              organisationStandards={organisationStandards}
+              projectStandardLinks={projectStandardLinks}
             />
           </Suspense>
         </div>

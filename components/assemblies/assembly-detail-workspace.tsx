@@ -13,10 +13,16 @@ import {
   type AssemblyPackageFormValues,
 } from "@/components/assemblies/assembly-package-form-fields";
 import { AssemblySummaryCard } from "@/components/assemblies/assembly-summary-card";
+import { EntityStandardsSection } from "@/components/standards/entity-standards-section";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { updateAssemblyPackageAction } from "@/src/lib/assemblies/actions";
-import type { AssemblyPackage, AssemblyPackageItem } from "@/src/types/database";
+import type {
+  AssemblyPackage,
+  AssemblyPackageItem,
+  Standard,
+  StandardLinkWithStandard,
+} from "@/src/types/database";
 
 /*
  * TODO: Apply assembly to takeoff item (set pricing_package_id on takeoff_items).
@@ -29,11 +35,15 @@ import type { AssemblyPackage, AssemblyPackageItem } from "@/src/types/database"
 type AssemblyDetailWorkspaceProps = {
   assemblyPackage: AssemblyPackage;
   items: AssemblyPackageItem[];
+  organisationStandards: Standard[];
+  assemblyStandardLinks: StandardLinkWithStandard[];
 };
 
 export function AssemblyDetailWorkspace({
   assemblyPackage,
   items,
+  organisationStandards,
+  assemblyStandardLinks,
 }: AssemblyDetailWorkspaceProps) {
   const router = useRouter();
   const [form, setForm] = useState<AssemblyPackageFormValues>(
@@ -112,6 +122,14 @@ export function AssemblyDetailWorkspace({
           </form>
         </CardContent>
       </Card>
+
+      <EntityStandardsSection
+        entityType="assembly_package"
+        entityId={assemblyPackage.id}
+        entityLabel={assemblyPackage.name}
+        initialLinks={assemblyStandardLinks}
+        availableStandards={organisationStandards}
+      />
 
       <Card>
         <CardHeader>

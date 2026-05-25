@@ -5,6 +5,7 @@ import {
   daysUntil,
 } from "@/src/lib/format";
 import type { TakeoffSummaryRow } from "@/src/lib/dashboard/queries";
+import type { OrganisationScopeGapSummary } from "@/src/lib/scope-gaps/types";
 import type { RateLibrarySummary } from "@/src/lib/rates/queries";
 import { OUTDATED_SUPPLIER_RATE_DAYS } from "@/src/lib/rates/constants";
 
@@ -199,10 +200,24 @@ function isDueSoon(project: Project, withinDays = 14): boolean {
   return days !== null && days >= 0 && days <= withinDays;
 }
 
+function gapCountForProject(
+  projectId: string,
+  scopeGapSummary: OrganisationScopeGapSummary | null | undefined
+): number {
+  if (!scopeGapSummary) {
+    return 0;
+  }
+  return (
+    scopeGapSummary.projectSummaries.find((row) => row.project_id === projectId)
+      ?.gap_count ?? 0
+  );
+}
+
 export function buildTenderCommandCentreData(
   projects: Project[],
   takeoffRows: TakeoffSummaryRow[],
-  rateSummary?: RateLibrarySummary | null
+  rateSummary?: RateLibrarySummary | null,
+  scopeGapSummary?: OrganisationScopeGapSummary | null
 ): TenderCommandCentreData {
   const activeProjects = projects.filter((project) =>
     ACTIVE_STATUSES.has(project.status)
@@ -213,9 +228,12 @@ export function buildTenderCommandCentreData(
     activeProjects,
     takeoffByProject
   );
-  const scopeGapsOutstanding = activeProjects.reduce((total, project) => {
-    return total + (takeoffByProject.get(project.id)?.scopeGaps ?? 0);
-  }, 0);
+  const scopeGapsOutstanding = scopeGapSummary?.totalGaps ?? activeProjects.reduce(
+    (total, project) => {
+      return total + (takeoffByProject.get(project.id)?.scopeGaps ?? 0);
+    },
+    0
+  );
 
   const pipelineMetrics: DashboardMetric[] = [
     {
@@ -236,13 +254,16 @@ export function buildTenderCommandCentreData(
     {
       label: "Scope Gaps Outstanding",
       value: scopeGapsOutstanding > 0 ? String(scopeGapsOutstanding) : "—",
-      hint: "Unreviewed or unpriced takeoff lines",
+      hint: "Package, pricing, generation, drawing, and standards gaps",
     },
   ];
 
   const activeTenders: ActiveTenderRow[] = activeProjects.map((project) => {
     const stats = takeoffByProject.get(project.id);
-    const scopeGaps = stats?.scopeGaps ?? 0;
+    const scopeGaps =
+      gapCountForProject(project.id, scopeGapSummary) ||
+      stats?.scopeGaps ||
+      0;
 
     return {
       id: project.id,
@@ -291,7 +312,7 @@ export function buildTenderCommandCentreData(
     {
       label: "Scope gaps",
       value: scopeGapsOutstanding > 0 ? String(scopeGapsOutstanding) : "—",
-      hint: "Lines awaiting review or pricing",
+      hint: "Outstanding scope checks on active tenders",
     },
   ];
 
