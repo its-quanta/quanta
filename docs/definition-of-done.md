@@ -98,6 +98,19 @@ Every shipped feature must satisfy:
 - [ ] Margin and markup applied per documented formula
 - [ ] `project_pricing_summary` matches UI and export
 
+### Assemblies / pricing packages (basic)
+
+- [ ] Phases 4–6 complete before this slice ships
+- [ ] CRUD on `pricing_packages`, `pricing_package_material_components`, `pricing_package_labour_components`
+- [ ] References on `pricing_package_references` (NZS 3604, building code clauses, specs, drawings, manufacturer guides, custom)
+- [ ] Package unit, wastage, cost/sell, markup, margin, notes, and assumptions editable
+- [ ] Apply package on `takeoff_items`; explosion creates/updates linked lines with `source = package_explosion`
+- [ ] Exploded quantities = takeoff quantity × component per package unit (with wastage on materials)
+- [ ] User can edit exploded project lines without changing org package template
+- [ ] Re-apply requires explicit confirm if overwriting existing exploded lines
+- [ ] `project_pricing_summary` includes exploded lines; audit on package create/update/apply
+- [ ] Organisation RLS on all package tables
+
 ### Clarifications (exclusions, assumptions, RFIs)
 
 - [ ] CRUD with type discriminator
@@ -113,7 +126,7 @@ Every shipped feature must satisfy:
 
 ### Audit trail
 
-- [ ] Create/update/delete on takeoff, materials, labour, pricing, clarifications logged
+- [ ] Create/update/delete on takeoff, materials, labour, pricing, packages, clarifications logged
 - [ ] Activity view per project with timestamp and user
 - [ ] AI accept/reject logged
 
@@ -133,6 +146,10 @@ Every shipped feature must satisfy:
 - Performance benchmarks
 - Team invitations
 - Billing
+- AI-suggested packages without user acceptance
+- Shared cross-tenant package marketplace
+- Package versioning / effective-date schedules
+- Supplier live pricing inside packages
 
 ## PR checklist (copy for reviewers)
 

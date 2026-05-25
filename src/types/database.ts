@@ -93,3 +93,75 @@ export const PROJECT_TYPES = [
 ] as const;
 
 export type ProjectType = (typeof PROJECT_TYPES)[number];
+
+export type DocumentProcessingStatus = "pending" | "ready" | "failed";
+
+export type DocumentClassification =
+  | "architectural_drawings"
+  | "structural_drawings"
+  | "specification"
+  | "schedule"
+  | "scope_document"
+  | "photos_images"
+  | "other";
+
+export type Document = {
+  id: string;
+  organisation_id: string;
+  project_id: string;
+  file_name: string;
+  storage_path: string;
+  file_type: string;
+  document_type: DocumentClassification;
+  page_count: number | null;
+  processing_status: DocumentProcessingStatus;
+  ai_summary: string | null;
+  uploaded_by: string | null;
+  created_at: string;
+};
+
+export type TakeoffItemStatus =
+  | "ai_draft"
+  | "needs_review"
+  | "reviewed"
+  | "priced"
+  | "excluded";
+
+export type TakeoffItem = {
+  id: string;
+  organisation_id: string;
+  project_id: string;
+  source_document_id: string | null;
+  trade: string;
+  item_name: string;
+  description: string | null;
+  quantity: number;
+  unit: string;
+  drawing_reference: string | null;
+  page_number: number | null;
+  confidence_score: number | null;
+  ai_generated: boolean;
+  reviewed: boolean;
+  status: TakeoffItemStatus;
+  notes: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TakeoffItemUpdate = Partial<
+  Pick<
+    TakeoffItem,
+    | "source_document_id"
+    | "trade"
+    | "item_name"
+    | "description"
+    | "quantity"
+    | "unit"
+    | "drawing_reference"
+    | "page_number"
+    | "notes"
+    | "status"
+    | "reviewed"
+  >
+>;

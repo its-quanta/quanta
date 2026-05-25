@@ -30,7 +30,7 @@ Do not ship UI that pretends to save data without a backing table and policy, ex
 | Step | Deliverable | Done when |
 |------|-------------|-----------|
 | 2.1 | `projects` table + list/create UI | Projects scoped to org |
-| 2.2 | Project workspace layout (tabs or nav): Overview, Documents, Takeoff, Materials, Labour, Pricing, Clarifications, Export, Activity | Navigation works with empty states |
+| 2.2 | Project workspace layout (tabs or nav): Overview, Documents, Takeoff, Materials, Labour, Pricing, Clarifications, Export, Activity; org-level Packages (Phase 7) | Navigation works with empty states |
 | 2.3 | Project metadata edit (client, reference, due date, status) | Saves with audit |
 
 **Vertical slice:** Create project → open workspace → edit details.
@@ -75,34 +75,53 @@ Do not ship UI that pretends to save data without a backing table and policy, ex
 
 **Vertical slice:** Change margin → sell price updates → audit records pricing change.
 
-## Phase 7 — Clarifications
+## Phase 7 — Assemblies / packages (basic)
+
+**Gate:** Phases 4–6 complete (manual takeoff, materials, labour, pricing). Do not start packages until line-by-line pricing works.
 
 | Step | Deliverable | Done when |
 |------|-------------|-----------|
-| 7.1 | `tender_clarifications` CRUD | Exclusions, assumptions, RFIs |
-| 7.2 | RFI status field | Open/answered/closed |
-| 7.3 | Include in export sheet | Appears in Excel |
+| 7.1 | `pricing_packages` + material/labour component tables + RLS | Org-scoped CRUD for package header and components |
+| 7.2 | Package library UI (settings or dedicated area) | Create/edit packages with unit, wastage, cost/sell, notes, assumptions |
+| 7.3 | `pricing_package_references` | Add NZS 3604, code clauses, drawing refs, manufacturer guides, custom refs |
+| 7.4 | Apply package on `takeoff_items` | User picks package; `pricing_package_id` stored |
+| 7.5 | Explosion to `material_lines` / `labour_lines` | `source = package_explosion`; qty = takeoff qty × per-unit component |
+| 7.6 | Pricing roll-up unchanged | `project_pricing_summary` includes exploded lines; audit on apply/re-apply |
 
-## Phase 8 — Export and audit
+**Vertical slice:** Create “framed wall per m²” package → apply to takeoff line → review materials and labour → sell price matches expectations.
+
+**Defer:** AI package suggestions, shared marketplace catalogues, versioned package history, bulk import of industry libraries.
+
+## Phase 8 — Clarifications
 
 | Step | Deliverable | Done when |
 |------|-------------|-----------|
-| 8.1 | `audit_events` on all major mutations | Activity feed per project |
-| 8.2 | Excel export route (takeoff, materials, labour, pricing, clarifications) | Download matches DB |
-| 8.3 | Export logged in audit | Traceable who exported when |
+| 8.1 | `tender_clarifications` CRUD | Exclusions, assumptions, RFIs |
+| 8.2 | RFI status field | Open/answered/closed |
+| 8.3 | Include in export sheet | Appears in Excel |
+
+## Phase 9 — Export and audit
+
+| Step | Deliverable | Done when |
+|------|-------------|-----------|
+| 9.1 | `audit_events` on all major mutations | Activity feed per project |
+| 9.2 | Excel export route (takeoff, materials, labour, pricing, clarifications, packages summary optional) | Download matches DB |
+| 9.3 | Export logged in audit | Traceable who exported when |
 
 **Vertical slice:** Complete manual estimate → export Excel → open file offline.
 
-## Phase 9 — AI-assisted takeoff (after Phase 4–8 stable)
+## Phase 10 — AI-assisted takeoff (after Phase 4–9 stable)
 
 | Step | Deliverable | Done when |
 |------|-------------|-----------|
-| 9.1 | `takeoff_draft_items`, `ai_generation_runs` | Draft rows isolated |
-| 9.2 | Server-side AI job from selected documents | Returns draft batch |
-| 9.3 | Review UI: accept / reject / edit per line | Accepted lines copy to `takeoff_items` with `source = ai_approved` |
-| 9.4 | Audit approve/reject | No silent merges |
+| 10.1 | `takeoff_draft_items`, `ai_generation_runs` | Draft rows isolated |
+| 10.2 | Server-side AI job from selected documents | Returns draft batch |
+| 10.3 | Review UI: accept / reject / edit per line | Accepted lines copy to `takeoff_items` with `source = ai_approved` |
+| 10.4 | Audit approve/reject | No silent merges |
 
 **Vertical slice:** Run AI draft → review → accept lines → manual pricing unchanged in trust model.
+
+**Later (post Phase 7):** `ai_generation_runs.run_type = package_suggestion` — AI proposes assemblies from takeoff descriptions; user accepts before explosion (draft only).
 
 ## Dependency graph
 
@@ -111,11 +130,13 @@ Phase 0 → Phase 1 → Phase 2 → Phase 3
                               ↓
                          Phase 4 (manual takeoff)
                               ↓
-                    Phase 5 → Phase 6 → Phase 7
+                    Phase 5 → Phase 6 → Phase 7 (packages)
                               ↓
-                         Phase 8 (export/audit)
+                    Phase 8 (clarifications)
                               ↓
-                         Phase 9 (AI) — optional gate: Phase 8 complete
+                    Phase 9 (export/audit)
+                              ↓
+                    Phase 10 (AI) — gate: Phase 9 complete; packages optional before AI
 ```
 
 ## What not to do early
@@ -125,6 +146,7 @@ Phase 0 → Phase 1 → Phase 2 → Phase 3
 - BIM viewer
 - Real-time multiplayer editing
 - Subscription billing
+- Full assembly marketplace or AI auto-apply packages without review
 
 ## Related documents
 

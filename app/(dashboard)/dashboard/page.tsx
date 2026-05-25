@@ -1,17 +1,28 @@
 import { AppTopBar } from "@/components/layout/app-top-bar";
-import { QuickToolsSection } from "@/components/dashboard/quick-tools-section";
-import { RecentProjectsSection } from "@/components/dashboard/recent-projects-section";
+import { ActiveTenderWorkspace } from "@/components/dashboard/active-tender-workspace";
+import { AiTenderInsightsPanel } from "@/components/dashboard/ai-tender-insights-panel";
+import { CommercialPerformanceSection } from "@/components/dashboard/commercial-performance-section";
+import { DashboardSection } from "@/components/dashboard/dashboard-section";
+import { PackageAssemblySection } from "@/components/dashboard/package-assembly-section";
+import { RatesHealthSection } from "@/components/dashboard/rates-health-section";
 import { TenderCommandHeader } from "@/components/dashboard/tender-command-header";
-import { TenderInsightCards } from "@/components/dashboard/tender-insight-cards";
 import { TenderMetricCards } from "@/components/dashboard/tender-metric-cards";
+import { UpcomingDeadlinesSection } from "@/components/dashboard/upcoming-deadlines-section";
+import { getTakeoffSummaryForOrganisation } from "@/src/lib/dashboard/queries";
+import { buildTenderCommandCentreData } from "@/src/lib/dashboard/stats";
 import { requireOrganisationProfile } from "@/src/lib/auth/require-profile";
-import { buildDashboardStats } from "@/src/lib/dashboard/stats";
 import { getProjectsForOrganisation } from "@/src/lib/projects/queries";
 
 export default async function DashboardPage() {
   const { profile } = await requireOrganisationProfile();
-  const projects = await getProjectsForOrganisation(profile.organisation_id);
-  const stats = buildDashboardStats(projects);
+  const organisationId = profile.organisation_id;
+
+  const [projects, takeoffRows] = await Promise.all([
+    getProjectsForOrganisation(organisationId),
+    getTakeoffSummaryForOrganisation(organisationId),
+  ]);
+
+  const data = buildTenderCommandCentreData(projects, takeoffRows);
   const welcomeName = profile.full_name?.split(" ")[0] ?? "there";
 
   return (
@@ -24,31 +35,56 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-6xl flex-col gap-8">
           <TenderCommandHeader welcomeName={welcomeName} />
 
-          <section className="flex flex-col gap-4">
-            <div>
-              <h2 className="text-lg font-medium text-foreground">Pipeline</h2>
-              <p className="text-sm text-muted-foreground">
-                Tender counts and values across your organisation.
-              </p>
-            </div>
-            <TenderMetricCards metrics={stats.metrics} />
-          </section>
+          <DashboardSection
+            title="Tender Pipeline Metrics"
+            description="Active pipeline value, pricing progress, and scope gaps."
+          >
+            <TenderMetricCards metrics={data.pipelineMetrics} />
+          </DashboardSection>
 
-          <section className="flex flex-col gap-4">
-            <div>
-              <h2 className="text-lg font-medium text-foreground">
-                Tender insights
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Deadlines, review queues, and risk flags for active tenders.
-              </p>
-            </div>
-            <TenderInsightCards insights={stats.insights} />
-          </section>
+          <DashboardSection
+            title="Active Tender Workspace"
+            description="Stage, pricing coverage, risk, and value for each active tender."
+          >
+            <ActiveTenderWorkspace tenders={data.activeTenders} />
+          </DashboardSection>
 
-          <QuickToolsSection />
+          <div className="grid gap-6 lg:grid-cols-2">
+            <DashboardSection
+              title="AI Tender Insights"
+              description="Draft insights for review — not final until verified."
+            >
+              <AiTenderInsightsPanel />
+            </DashboardSection>
 
-          <RecentProjectsSection projects={stats.recentProjects} />
+            <DashboardSection
+              title="Upcoming Deadlines"
+              description="Tender due dates in the next 14 days."
+            >
+              <UpcomingDeadlinesSection deadlines={data.upcomingDeadlines} />
+            </DashboardSection>
+          </div>
+
+          <DashboardSection
+            title="Package / Assembly Usage"
+            description="Standard build-ups applied across your organisation."
+          >
+            <PackageAssemblySection />
+          </DashboardSection>
+
+          <DashboardSection
+            title="Rates Health"
+            description="Material, labour, and supplier rate libraries."
+          >
+            <RatesHealthSection metrics={data.ratesHealth} />
+          </DashboardSection>
+
+          <DashboardSection
+            title="Commercial Performance"
+            description="Margin, coverage, clarifications, and scope gaps."
+          >
+            <CommercialPerformanceSection metrics={data.commercialPerformance} />
+          </DashboardSection>
         </div>
       </main>
     </>

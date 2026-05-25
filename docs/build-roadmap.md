@@ -142,3 +142,15 @@ Launch when **M6** definition of done is complete for a pilot subcontractor:
 - [build-sequence.md](./build-sequence.md)
 - [definition-of-done.md](./definition-of-done.md)
 - [mvp-feature-lock.md](./mvp-feature-lock.md)
+
+Current status:
+- Auth working
+- Organisation/profile foundation working
+- Dashboard loading
+- Project creation working
+- Project list working
+- Project detail shell working
+- Initial protected app shell complete
+
+Next build phase:
+- Document upload and document management

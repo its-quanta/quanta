@@ -27,7 +27,14 @@ export type ProfileRow = {
 };
 
 export function isMissingColumnError(message: string): boolean {
-  return /column .+ does not exist/i.test(message);
+  return (
+    /column .+ does not exist/i.test(message) ||
+    /Could not find the '.+' column of/i.test(message)
+  );
+}
+
+export function isRlsPolicyError(message: string): boolean {
+  return /row-level security policy/i.test(message);
 }
 
 export function normalizeProfileRole(

@@ -8,9 +8,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ProjectDocumentsPanel } from "@/components/documents/project-documents-panel";
+import { ProjectTakeoffPanel } from "@/components/takeoff/project-takeoff-panel";
 import { ProjectStatusBadge } from "@/components/projects/project-status-badge";
 import { formatCurrency, formatDate } from "@/src/lib/format";
-import type { Project } from "@/src/types/database";
+import type { Document, Project, TakeoffItem } from "@/src/types/database";
 
 const workspaceTabs = [
   { value: "overview", label: "Overview" },
@@ -25,6 +27,8 @@ const workspaceTabs = [
 
 type ProjectWorkspaceTabsProps = {
   project: Project;
+  documents: Document[];
+  takeoffItems: TakeoffItem[];
 };
 
 function TabEmptyState({
@@ -109,7 +113,11 @@ function OverviewPanel({ project }: { project: Project }) {
   );
 }
 
-export function ProjectWorkspaceTabs({ project }: ProjectWorkspaceTabsProps) {
+export function ProjectWorkspaceTabs({
+  project,
+  documents,
+  takeoffItems,
+}: ProjectWorkspaceTabsProps) {
   return (
     <Tabs defaultValue="overview" className="gap-4">
       <TabsList
@@ -127,15 +135,16 @@ export function ProjectWorkspaceTabs({ project }: ProjectWorkspaceTabsProps) {
         <OverviewPanel project={project} />
       </TabsContent>
       <TabsContent value="documents">
-        <TabEmptyState
-          title="Documents"
-          description="Upload drawings, specifications, and schedules for this tender. Document upload connects in the next phase."
+        <ProjectDocumentsPanel
+          projectId={project.id}
+          documents={documents}
         />
       </TabsContent>
       <TabsContent value="takeoff">
-        <TabEmptyState
-          title="Takeoff"
-          description="Build quantity lines manually. Takeoff tables connect in the next phase."
+        <ProjectTakeoffPanel
+          projectId={project.id}
+          items={takeoffItems}
+          documents={documents}
         />
       </TabsContent>
       <TabsContent value="materials">

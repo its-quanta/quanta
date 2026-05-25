@@ -4,6 +4,9 @@ import { AppTopBar } from "@/components/layout/app-top-bar";
 import { ProjectStatusBadge } from "@/components/projects/project-status-badge";
 import { ProjectWorkspaceTabs } from "@/components/projects/project-workspace-tabs";
 import { formatCurrency, formatDate } from "@/src/lib/format";
+import { getDocumentsForProject } from "@/src/lib/documents/queries";
+import { getTakeoffItemsForProject } from "@/src/lib/takeoff/queries";
+import { requireOrganisationProfile } from "@/src/lib/auth/require-profile";
 import { getProjectById } from "@/src/lib/projects/queries";
 
 type ProjectPageProps = {
@@ -12,11 +15,22 @@ type ProjectPageProps = {
 
 export default async function ProjectPage({ params }: ProjectPageProps) {
   const { id } = await params;
+  const { profile } = await requireOrganisationProfile();
   const project = await getProjectById(id);
 
-  if (!project) {
+  if (!project || project.organisation_id !== profile.organisation_id) {
     notFound();
   }
+
+  const documents = await getDocumentsForProject(
+    project.id,
+    profile.organisation_id
+  );
+
+  const takeoffItems = await getTakeoffItemsForProject(
+    project.id,
+    profile.organisation_id
+  );
 
   return (
     <>
@@ -50,7 +64,11 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             </div>
           </header>
 
-          <ProjectWorkspaceTabs project={project} />
+          <ProjectWorkspaceTabs
+            project={project}
+            documents={documents}
+            takeoffItems={takeoffItems}
+          />
         </div>
       </main>
     </>

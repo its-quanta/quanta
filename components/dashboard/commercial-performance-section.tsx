@@ -1,11 +1,13 @@
-import type { DashboardMetric } from "@/src/lib/dashboard/stats";
+import type { CommercialPerformanceMetric } from "@/src/lib/dashboard/stats";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-type TenderMetricCardsProps = {
-  metrics: DashboardMetric[];
+type CommercialPerformanceSectionProps = {
+  metrics: CommercialPerformanceMetric[];
 };
 
-export function TenderMetricCards({ metrics }: TenderMetricCardsProps) {
+export function CommercialPerformanceSection({
+  metrics,
+}: CommercialPerformanceSectionProps) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {metrics.map((metric) => (

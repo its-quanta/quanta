@@ -24,7 +24,8 @@ flowchart LR
 | 2 | Completes email verification if required | Session established |
 | 3 | Enters company name and contact details | `organisations` + `organisation_members` created |
 | 4 | Sets default labour rate, margin %, markup % | `organisation_settings` saved |
-| 5 | Lands on project dashboard | Empty state with “Create project” |
+| 5 | (Later) Opens Packages library under org settings | Optional; Phase 7 — create reusable assemblies |
+| 6 | Lands on project dashboard | Empty state with “Create project” |
 
 **Success:** User can create a project with org defaults applied.
 
@@ -76,6 +77,7 @@ flowchart LR
 | 2 | Adds rows: description, unit, quantity, location | Rows persisted; sort order maintained |
 | 3 | Edits or deletes rows | Immediate save; audit per change |
 | 4 | Reorders rows | `sort_order` updated |
+| 5 | (Phase 7) Selects a package for a row | `pricing_package_id` set; unit should align with package unit |
 
 **Success:** Takeoff table reflects ground truth quantities; refresh does not lose data.
 
@@ -90,12 +92,14 @@ flowchart LR
 | Step | User action | System response |
 |------|-------------|-----------------|
 | 1 | Opens Materials tab | Table of `material_lines` |
-| 2 | Adds materials (optional link to takeoff line) | Unit cost × qty (+ wastage) → line total |
+| 2 | Adds materials manually (optional link to takeoff line) | Unit cost × qty (+ wastage) → line total |
 | 3 | Opens Labour tab | Table of `labour_lines` |
-| 4 | Adds labour; rate prefilled from org settings | User can override rate per line |
-| 5 | Reviews section subtotals | Materials + labour subtotals shown |
+| 4 | Adds labour manually; rate prefilled from org settings | User can override rate per line |
+| 5 | (Phase 7) Applies package on takeoff → “Explode” or auto on apply | Material and labour rows created with `source = package_explosion` |
+| 6 | Edits exploded lines if needed | Changes stay on project rows; org package template unchanged |
+| 7 | Reviews section subtotals | Materials + labour subtotals shown |
 
-**Success:** Direct cost build-up complete and linked to project.
+**Success:** Direct cost build-up complete and linked to project; package-driven lines are auditable and editable.
 
 ---
 
@@ -170,7 +174,50 @@ flowchart LR
 
 ---
 
-## 10. Review activity and corrections
+## 10. Organisation package library (Phase 7)
+
+**Actor:** Owner, senior estimator
+
+**Goal:** Maintain reusable priced build-ups for the company.
+
+| Step | User action | System response |
+|------|-------------|-----------------|
+| 1 | Opens Packages (org settings) | Lists `pricing_packages` for organisation |
+| 2 | Creates package: name, unit (m², lm, each), trade | Header row saved |
+| 3 | Adds material components per unit | `pricing_package_material_components` rows |
+| 4 | Adds labour components per unit | `pricing_package_labour_components` rows |
+| 5 | Sets wastage, cost rate, sell rate, markup, margin | Stored on package; defaults may come from org settings |
+| 6 | Adds notes, assumptions | Text on package header |
+| 7 | Links references (e.g. NZS 3604, drawing A-101, manufacturer guide) | `pricing_package_references` rows |
+| 8 | Saves and marks active | Package available on project takeoff |
+
+**Example packages:** framed wall per m², suspended ceiling per m², demolition wall per lm/m², door install per each, flooring per m², joinery per each, GIB lining per m².
+
+**Success:** Package can be applied on a project takeoff line without re-entering component breakdown each tender.
+
+---
+
+## 11. Apply package to takeoff (Phase 7)
+
+**Actor:** Estimator
+
+**Goal:** Explode a standard build-up from quantities already in takeoff.
+
+| Step | User action | System response |
+|------|-------------|-----------------|
+| 1 | On takeoff row, chooses “Apply package” | Package picker filtered by trade/unit where possible |
+| 2 | Confirms apply (overwrite if lines exist) | `takeoff_items.pricing_package_id` + `package_applied_at` |
+| 3 | System explodes components | `material_lines` / `labour_lines` qty = takeoff qty × per-unit component |
+| 4 | Reviews Materials and Labour tabs | User adjusts unit costs or rates if tender-specific |
+| 5 | Opens Pricing tab | Totals include exploded direct cost |
+
+**Success:** One takeoff quantity drives full material and labour allowance; margin/markup flow from existing pricing engine.
+
+**Future:** AI suggests packages from takeoff description; user accepts suggestion before explosion (draft only).
+
+---
+
+## 12. Review activity and corrections
 
 **Actor:** Owner, QS
 
@@ -178,7 +225,7 @@ flowchart LR
 
 | Step | User action | System response |
 |------|-------------|-----------------|
-| 1 | Opens Activity tab | Chronological `audit_events` |
+| 1 | Opens Activity tab | Chronological `audit_events` (includes package apply / re-apply) |
 | 2 | Filters by entity or user | List updates |
 | 3 | Corrects data in source table | New audit entry; export re-run for latest truth |
 
@@ -192,11 +239,12 @@ flowchart LR
 2. Project create + workspace (2)
 3. Documents (3)
 4. Manual takeoff (4)
-5. Materials + labour (5)
+5. Materials + labour — manual path (5)
 6. Pricing (6)
-7. Clarifications (7)
-8. Export + activity (8, 10)
-9. AI draft (9) — last
+7. Packages library + apply to takeoff (10, 11) — after 4–6
+8. Clarifications (7)
+9. Export + activity (8, 12)
+10. AI takeoff draft (9) — last; AI package suggestions after packages stable
 
 ## Related documents
 
