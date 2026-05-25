@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Add01Icon, Delete02Icon, Edit02Icon } from "@hugeicons/core-free-icons";
@@ -32,12 +32,17 @@ import {
 } from "@/components/ui/table";
 import { deletePricingItemAction } from "@/src/lib/pricing/actions";
 import { formatPricingMethodLabel } from "@/src/lib/pricing/constants";
+import {
+  formatPricingSourceShort,
+} from "@/src/lib/pricing/pricing-source";
 import type { PricingItemWithTakeoff } from "@/src/lib/pricing/queries";
+import type { TakeoffItemAssemblyWithPackage } from "@/src/types/database";
 import { formatCurrency, formatPercent } from "@/src/lib/format";
 
 type PricingTableProps = {
   projectId: string;
   pricingItems: PricingItemWithTakeoff[];
+  takeoffAssemblies: TakeoffItemAssemblyWithPackage[];
   onAddPricing: () => void;
 };
 
@@ -51,6 +56,7 @@ function formatOptionalPercent(value: number | null): string {
 export function PricingTable({
   projectId,
   pricingItems: initialItems,
+  takeoffAssemblies,
   onAddPricing,
 }: PricingTableProps) {
   const router = useRouter();
@@ -61,6 +67,14 @@ export function PricingTable({
   const [editItem, setEditItem] = useState<PricingItemWithTakeoff | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PricingItemWithTakeoff | null>(
     null
+  );
+
+  const assemblyByTakeoffId = useMemo(
+    () =>
+      new Map(
+        takeoffAssemblies.map((row) => [row.takeoff_item_id, row] as const)
+      ),
+    [takeoffAssemblies]
   );
 
   useEffect(() => {
@@ -134,6 +148,7 @@ export function PricingTable({
               <TableRow>
                 <TableHead scope="col">Takeoff item</TableHead>
                 <TableHead scope="col">Method</TableHead>
+                <TableHead scope="col">Pricing source</TableHead>
                 <TableHead scope="col" className="text-right">
                   Qty
                 </TableHead>
@@ -166,7 +181,13 @@ export function PricingTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((item) => (
+              {items.map((item) => {
+                const appliedAssembly = assemblyByTakeoffId.get(
+                  item.takeoff_item_id
+                );
+                const isPackagePricing = item.pricing_method === "package";
+
+                return (
                 <TableRow key={item.id}>
                   <TableCell>
                     <div className="min-w-[140px]">
@@ -179,9 +200,34 @@ export function PricingTable({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">
-                      {formatPricingMethodLabel(item.pricing_method)}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge variant="outline">
+                        {formatPricingMethodLabel(item.pricing_method)}
+                      </Badge>
+                      {isPackagePricing ? (
+                        <Badge
+                          variant="outline"
+                          className="border-violet-500/30 bg-violet-500/10 text-violet-800"
+                        >
+                          Package
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="min-w-[120px]">
+                      <p className="text-sm text-foreground">
+                        {formatPricingSourceShort(
+                          item.pricing_method,
+                          appliedAssembly
+                        )}
+                      </p>
+                      {appliedAssembly && isPackagePricing ? (
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {appliedAssembly.assembly_package.name}
+                        </p>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm tabular-nums">
                     {item.quantity}
@@ -245,7 +291,8 @@ export function PricingTable({
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+              );
+              })}
             </TableBody>
           </Table>
         </div>

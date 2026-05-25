@@ -187,6 +187,38 @@ export type TakeoffItemUpdate = Partial<
   >
 >;
 
+export type TakeoffItemAssembly = {
+  id: string;
+  organisation_id: string;
+  project_id: string;
+  takeoff_item_id: string;
+  assembly_package_id: string;
+  quantity: number;
+  unit: string;
+  calculated_cost: number;
+  calculated_sell: number;
+  calculated_margin: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TakeoffItemAssemblyWithPackage = TakeoffItemAssembly & {
+  assembly_package: {
+    id: string;
+    name: string;
+    unit: string;
+    is_active: boolean;
+  };
+};
+
+export type ApplyAssemblyPackageInput = {
+  takeoff_item_id: string;
+  assembly_package_id: string;
+  quantity: number;
+  unit: string;
+  replace_existing_pricing?: boolean;
+};
+
 export type PricingMethod =
   | "m2"
   | "sqm"
@@ -363,4 +395,118 @@ export type RecentRateChange = {
   label: string;
   detail: string | null;
   updated_at: string;
+};
+
+export type AssemblyPackageItemType =
+  | "material"
+  | "labour"
+  | "plant"
+  | "subcontractor"
+  | "allowance";
+
+export type AssemblyPackage = {
+  id: string;
+  organisation_id: string;
+  name: string;
+  description: string | null;
+  trade: string | null;
+  unit: string;
+  default_cost_rate: number;
+  default_sell_rate: number;
+  default_markup_percentage: number | null;
+  default_margin_percentage: number | null;
+  standard_reference: string | null;
+  specification_reference: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AssemblyPackageItem = {
+  id: string;
+  organisation_id: string;
+  assembly_package_id: string;
+  item_type: AssemblyPackageItemType;
+  item_name: string;
+  quantity_per_unit: number;
+  unit: string;
+  wastage_percentage: number;
+  cost_rate: number;
+  sell_rate: number | null;
+  total_cost_per_unit: number;
+  notes: string | null;
+  created_at: string;
+};
+
+export type AssemblyPackageWithCount = AssemblyPackage & {
+  component_count: number;
+};
+
+export type AssemblyPackageInput = {
+  name: string;
+  description?: string | null;
+  trade?: string | null;
+  unit?: string;
+  default_markup_percentage?: number | null;
+  default_margin_percentage?: number | null;
+  standard_reference?: string | null;
+  specification_reference?: string | null;
+  notes?: string | null;
+  is_active?: boolean;
+};
+
+export type AssemblyPackageUpdate = Partial<AssemblyPackageInput>;
+
+export type AssemblyPackageItemInput = {
+  item_type: AssemblyPackageItemType;
+  item_name: string;
+  quantity_per_unit?: number;
+  unit?: string;
+  wastage_percentage?: number;
+  cost_rate?: number;
+  sell_rate?: number | null;
+  notes?: string | null;
+};
+
+export type AssemblyPackageItemUpdate = Partial<AssemblyPackageItemInput>;
+
+export type EstimatePricingSource = "assembly" | "assembly_package" | "manual";
+
+export type ProjectMaterialItem = {
+  id: string;
+  organisation_id: string;
+  project_id: string;
+  takeoff_item_id: string;
+  assembly_package_id: string;
+  source_package_name: string;
+  material_name: string;
+  quantity: number;
+  unit: string;
+  cost_rate: number;
+  total_cost: number;
+  wastage_percent: number;
+  supplier: string | null;
+  pricing_source: EstimatePricingSource;
+  reviewed: boolean;
+  created_at: string;
+};
+
+export type ProjectLabourItem = {
+  id: string;
+  organisation_id: string;
+  project_id: string;
+  takeoff_item_id: string;
+  assembly_package_id: string;
+  source_package_name: string;
+  labour_name: string;
+  hours: number;
+  unit: string;
+  cost_rate: number;
+  charge_rate: number;
+  total_cost: number;
+  total_sell: number;
+  pricing_source: EstimatePricingSource;
+  reviewed: boolean;
+  created_at: string;
 };

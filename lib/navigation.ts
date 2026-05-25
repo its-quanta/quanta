@@ -15,7 +15,7 @@ export type NavItem = {
 export const mainNavItems: NavItem[] = [
   { title: "Dashboard", href: "/dashboard", icon: DashboardSquare01Icon },
   { title: "Projects", href: "/projects", icon: Folder01Icon },
-  { title: "Templates", href: "/templates", icon: FileEditIcon },
+  { title: "Assemblies", href: "/templates", icon: FileEditIcon },
   { title: "Rates", href: "/rates", icon: Calculator01Icon },
   { title: "Settings", href: "/settings", icon: Settings01Icon },
 ];

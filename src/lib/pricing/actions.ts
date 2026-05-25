@@ -214,7 +214,7 @@ function buildPricingPayload(
   };
 }
 
-async function syncTakeoffItemPricingStatus(
+export async function syncTakeoffItemPricingStatus(
   takeoffItemId: string,
   projectId: string,
   organisationId: string,
@@ -255,7 +255,7 @@ async function syncTakeoffItemPricingStatus(
   }
 }
 
-async function syncProjectPricingTotals(
+export async function syncProjectPricingTotals(
   projectId: string,
   organisationId: string
 ): Promise<void> {

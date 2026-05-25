@@ -68,8 +68,8 @@ export default async function DashboardPage() {
           </div>
 
           <DashboardSection
-            title="Package / Assembly Usage"
-            description="Standard build-ups applied across your organisation."
+            title="Package / assembly library"
+            description="Reusable priced build-ups for your organisation."
           >
             <PackageAssemblySection />
           </DashboardSection>

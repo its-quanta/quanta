@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 
 import { AppTopBar } from "@/components/layout/app-top-bar";
@@ -6,7 +7,10 @@ import { ProjectWorkspaceTabs } from "@/components/projects/project-workspace-ta
 import { formatCurrency, formatDate } from "@/src/lib/format";
 import { getDocumentPagesForProject } from "@/src/lib/documents/document-page-queries";
 import { getDocumentsForProject } from "@/src/lib/documents/queries";
+import { getActiveAssemblyPackagesForOrganisation } from "@/src/lib/assemblies/queries";
 import { getPricingItemsForProject } from "@/src/lib/pricing/queries";
+import { getProjectEstimateItems } from "@/src/lib/estimate-generation/queries";
+import { getTakeoffItemAssembliesForProject } from "@/src/lib/takeoff-assembly/queries";
 import { getTakeoffItemsForProject } from "@/src/lib/takeoff/queries";
 import { requireOrganisationProfile } from "@/src/lib/auth/require-profile";
 import { getProjectById } from "@/src/lib/projects/queries";
@@ -24,12 +28,36 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     notFound();
   }
 
-  const [documents, documentPages, takeoffItems, pricingItems] = await Promise.all([
+  const [
+    documents,
+    documentPages,
+    takeoffItems,
+    pricingItems,
+    assemblyPackages,
+    takeoffAssemblies,
+    estimateData,
+  ] = await Promise.all([
     getDocumentsForProject(project.id, profile.organisation_id),
     getDocumentPagesForProject(project.id, profile.organisation_id),
     getTakeoffItemsForProject(project.id, profile.organisation_id),
     getPricingItemsForProject(project.id, profile.organisation_id),
+    getActiveAssemblyPackagesForOrganisation(profile.organisation_id),
+    getTakeoffItemAssembliesForProject(
+      project.id,
+      profile.organisation_id
+    ),
+    getProjectEstimateItems(project.id, profile.organisation_id),
   ]);
+
+  const { materialItems, labourItems, loadError: estimateLoadError } =
+    estimateData;
+
+  const pricingItemsPlain = pricingItems.map(
+    ({
+      takeoff_item: _takeoff,
+      ...pricing
+    }) => pricing
+  );
 
   return (
     <>
@@ -63,13 +91,25 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             </div>
           </header>
 
-          <ProjectWorkspaceTabs
-            project={project}
-            documents={documents}
-            documentPages={documentPages}
-            takeoffItems={takeoffItems}
-            pricingItems={pricingItems}
-          />
+          <Suspense
+            fallback={
+              <div className="h-32 animate-pulse rounded-lg bg-muted/40" />
+            }
+          >
+            <ProjectWorkspaceTabs
+              project={project}
+              documents={documents}
+              documentPages={documentPages}
+              takeoffItems={takeoffItems}
+              pricingItems={pricingItems}
+              assemblyPackages={assemblyPackages}
+              takeoffAssemblies={takeoffAssemblies}
+              pricingItemsPlain={pricingItemsPlain}
+              materialItems={materialItems}
+              labourItems={labourItems}
+              estimateLoadError={estimateLoadError}
+            />
+          </Suspense>
         </div>
       </main>
     </>

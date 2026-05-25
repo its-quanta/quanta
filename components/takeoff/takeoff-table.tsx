@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -18,6 +19,7 @@ import {
 } from "@hugeicons/core-free-icons";
 
 import { AddTakeoffItemDialog } from "@/components/takeoff/add-takeoff-item-dialog";
+import { ApplyPackageDialog } from "@/components/takeoff/apply-package-dialog";
 import { EditTakeoffItemDialog } from "@/components/takeoff/edit-takeoff-item-dialog";
 import { TakeoffStatusBadge } from "@/components/takeoff/takeoff-status-badge";
 import {
@@ -58,18 +60,30 @@ import {
   markTakeoffItemReviewedAction,
   markTakeoffItemUnreviewedAction,
 } from "@/src/lib/takeoff/actions";
+import { formatPricingSourceLabel } from "@/src/lib/pricing/pricing-source";
 import {
   buildDrawingReferenceContext,
   formatDrawingReferencePrimary,
   formatDrawingReferenceSecondary,
 } from "@/src/lib/takeoff/drawing-reference";
-import type { Document, DocumentPage, TakeoffItem } from "@/src/types/database";
+import type {
+  AssemblyPackage,
+  Document,
+  DocumentPage,
+  PricingItem,
+  TakeoffItem,
+  TakeoffItemAssemblyWithPackage,
+} from "@/src/types/database";
 
 type TakeoffTableProps = {
   projectId: string;
   items: TakeoffItem[];
   documents: Document[];
   documentPages: DocumentPage[];
+  assemblyPackages: AssemblyPackage[];
+  takeoffAssemblies: TakeoffItemAssemblyWithPackage[];
+  pricingItems: PricingItem[];
+  onPriceManual?: (takeoffItemId: string) => void;
 };
 
 export function TakeoffTable({
@@ -77,6 +91,10 @@ export function TakeoffTable({
   items: initialItems,
   documents,
   documentPages,
+  assemblyPackages,
+  takeoffAssemblies,
+  pricingItems,
+  onPriceManual,
 }: TakeoffTableProps) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
@@ -87,6 +105,9 @@ export function TakeoffTable({
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editItem, setEditItem] = useState<TakeoffItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TakeoffItem | null>(null);
+  const [applyPackageItem, setApplyPackageItem] = useState<TakeoffItem | null>(
+    null
+  );
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -96,6 +117,22 @@ export function TakeoffTable({
   const drawingContext = useMemo(
     () => buildDrawingReferenceContext(documents, documentPages),
     [documents, documentPages]
+  );
+
+  const takeoffAssembliesByItemId = useMemo(
+    () =>
+      new Map(
+        takeoffAssemblies.map((row) => [row.takeoff_item_id, row] as const)
+      ),
+    [takeoffAssemblies]
+  );
+
+  const pricingByTakeoffId = useMemo(
+    () =>
+      new Map(
+        pricingItems.map((row) => [row.takeoff_item_id, row] as const)
+      ),
+    [pricingItems]
   );
 
   const tradesInUse = useMemo(
@@ -140,11 +177,33 @@ export function TakeoffTable({
       {
         accessorKey: "item_name",
         header: "Item",
-        cell: ({ row }) => (
-          <span className="font-medium text-foreground">
-            {row.original.item_name}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const applied = takeoffAssembliesByItemId.get(row.original.id);
+
+          return (
+            <div className="flex min-w-[140px] flex-col gap-1">
+              <span className="font-medium text-foreground">
+                {row.original.item_name}
+              </span>
+              {applied ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge
+                    variant="outline"
+                    className="border-violet-500/30 bg-violet-500/10 text-violet-800"
+                  >
+                    Package applied
+                  </Badge>
+                  <Link
+                    href={`/templates/${applied.assembly_package_id}`}
+                    className="text-xs text-primary underline-offset-4 hover:underline"
+                  >
+                    {applied.assembly_package.name}
+                  </Link>
+                </div>
+              ) : null}
+            </div>
+          );
+        },
       },
       {
         accessorKey: "description",
@@ -216,6 +275,44 @@ export function TakeoffTable({
         ),
       },
       {
+        id: "pricing",
+        header: "Pricing",
+        cell: ({ row }) => {
+          const pricing = pricingByTakeoffId.get(row.original.id);
+          if (!pricing) {
+            return (
+              <Badge
+                variant="outline"
+                className="border-amber-500/30 bg-amber-500/10 text-amber-800"
+              >
+                Unpriced
+              </Badge>
+            );
+          }
+          return (
+            <Badge
+              variant="outline"
+              className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+            >
+              Priced
+            </Badge>
+          );
+        },
+      },
+      {
+        id: "pricing_source",
+        header: "Source",
+        cell: ({ row }) => {
+          const pricing = pricingByTakeoffId.get(row.original.id);
+          const applied = takeoffAssembliesByItemId.get(row.original.id);
+          return (
+            <span className="text-sm text-muted-foreground">
+              {formatPricingSourceLabel(pricing?.pricing_method, applied)}
+            </span>
+          );
+        },
+      },
+      {
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => <TakeoffStatusBadge status={row.original.status} />,
@@ -248,7 +345,10 @@ export function TakeoffTable({
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        cell: ({ row }) => (
+        cell: ({ row }) => {
+          const hasPackage = takeoffAssembliesByItemId.has(row.original.id);
+
+          return (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -265,6 +365,21 @@ export function TakeoffTable({
                 <HugeiconsIcon icon={Edit02Icon} strokeWidth={2} />
                 Edit
               </DropdownMenuItem>
+              {row.original.status !== "excluded" ? (
+                <DropdownMenuItem
+                  onClick={() => setApplyPackageItem(row.original)}
+                  disabled={assemblyPackages.length === 0}
+                >
+                  {hasPackage ? "Replace package" : "Apply package"}
+                </DropdownMenuItem>
+              ) : null}
+              {row.original.status !== "excluded" && onPriceManual ? (
+                <DropdownMenuItem
+                  onClick={() => onPriceManual(row.original.id)}
+                >
+                  Price manual
+                </DropdownMenuItem>
+              ) : null}
               {row.original.reviewed ? (
                 <DropdownMenuItem
                   onClick={() => runRowAction(row.original.id, () =>
@@ -301,10 +416,20 @@ export function TakeoffTable({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        ),
+          );
+        },
       },
     ],
-    [drawingContext, isPending, pendingRowId, projectId]
+    [
+      assemblyPackages.length,
+      drawingContext,
+      isPending,
+      onPriceManual,
+      pendingRowId,
+      pricingByTakeoffId,
+      projectId,
+      takeoffAssembliesByItemId,
+    ]
   );
 
   const table = useReactTable({
@@ -454,6 +579,29 @@ export function TakeoffTable({
         documentPages={documentPages}
         open={addDialogOpen}
         onOpenChange={setAddDialogOpen}
+        onSuccess={setSuccessMessage}
+      />
+
+      <ApplyPackageDialog
+        projectId={projectId}
+        takeoffItem={applyPackageItem}
+        existingAssembly={
+          applyPackageItem
+            ? (takeoffAssembliesByItemId.get(applyPackageItem.id) ?? null)
+            : null
+        }
+        assemblyPackages={assemblyPackages}
+        existingPricing={
+          applyPackageItem
+            ? (pricingByTakeoffId.get(applyPackageItem.id) ?? null)
+            : null
+        }
+        open={Boolean(applyPackageItem)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setApplyPackageItem(null);
+          }
+        }}
         onSuccess={setSuccessMessage}
       />
 

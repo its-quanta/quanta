@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { ApplyPackageDialog } from "@/components/takeoff/apply-package-dialog";
 import { AddPricingItemDialog } from "@/components/pricing/add-pricing-item-dialog";
 import { PricingSummaryCards } from "@/components/pricing/pricing-summary-cards";
 import { PricingTable } from "@/components/pricing/pricing-table";
@@ -19,22 +20,66 @@ import {
   getPricedTakeoffIds,
   getUnpricedTakeoffItems,
 } from "@/src/lib/pricing/summary";
-import type { TakeoffItem } from "@/src/types/database";
+import type {
+  AssemblyPackage,
+  PricingItem,
+  TakeoffItem,
+  TakeoffItemAssemblyWithPackage,
+} from "@/src/types/database";
 
 type ProjectPricingPanelProps = {
   projectId: string;
   pricingItems: PricingItemWithTakeoff[];
   takeoffItems: TakeoffItem[];
+  takeoffAssemblies: TakeoffItemAssemblyWithPackage[];
+  assemblyPackages: AssemblyPackage[];
+  pricingItemsPlain: PricingItem[];
+  initialTakeoffItemId?: string | null;
+  onInitialTakeoffConsumed?: () => void;
 };
 
 export function ProjectPricingPanel({
   projectId,
   pricingItems,
   takeoffItems,
+  takeoffAssemblies,
+  assemblyPackages,
+  pricingItemsPlain,
+  initialTakeoffItemId,
+  onInitialTakeoffConsumed,
 }: ProjectPricingPanelProps) {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [initialTakeoffItemId, setInitialTakeoffItemId] = useState<string | null>(
+  const [applyPackageItem, setApplyPackageItem] = useState<TakeoffItem | null>(
     null
+  );
+  const [addDialogTakeoffId, setAddDialogTakeoffId] = useState<string | null>(
+    null
+  );
+
+  const takeoffAssembliesByItemId = useMemo(
+    () =>
+      new Map(
+        takeoffAssemblies.map((row) => [row.takeoff_item_id, row] as const)
+      ),
+    [takeoffAssemblies]
+  );
+
+  useEffect(() => {
+    if (!initialTakeoffItemId) {
+      return;
+    }
+
+    setAddDialogTakeoffId(initialTakeoffItemId);
+    setAddDialogOpen(true);
+    onInitialTakeoffConsumed?.();
+  }, [initialTakeoffItemId, onInitialTakeoffConsumed]);
+
+  const pricingByTakeoffId = useMemo(
+    () =>
+      new Map(
+        pricingItemsPlain.map((row) => [row.takeoff_item_id, row] as const)
+      ),
+    [pricingItemsPlain]
   );
 
   const pricedTakeoffIds = useMemo(
@@ -53,8 +98,15 @@ export function ProjectPricingPanel({
   );
 
   function openAddPricing(takeoffItemId?: string) {
-    setInitialTakeoffItemId(takeoffItemId ?? null);
+    setAddDialogTakeoffId(takeoffItemId ?? null);
     setAddDialogOpen(true);
+  }
+
+  function openApplyPackage(takeoffItemId: string) {
+    const takeoff = takeoffItems.find((item) => item.id === takeoffItemId);
+    if (takeoff) {
+      setApplyPackageItem(takeoff);
+    }
   }
 
   return (
@@ -73,6 +125,7 @@ export function ProjectPricingPanel({
           <PricingTable
             projectId={projectId}
             pricingItems={pricingItems}
+            takeoffAssemblies={takeoffAssemblies}
             onAddPricing={() => openAddPricing()}
           />
         </CardContent>
@@ -81,6 +134,30 @@ export function ProjectPricingPanel({
       <UnpricedTakeoffSection
         items={unpricedItems}
         onAddPricing={(takeoffItemId) => openAddPricing(takeoffItemId)}
+        onApplyPackage={openApplyPackage}
+        canApplyPackage={assemblyPackages.length > 0}
+      />
+
+      <ApplyPackageDialog
+        projectId={projectId}
+        takeoffItem={applyPackageItem}
+        existingAssembly={
+          applyPackageItem
+            ? (takeoffAssembliesByItemId.get(applyPackageItem.id) ?? null)
+            : null
+        }
+        assemblyPackages={assemblyPackages}
+        existingPricing={
+          applyPackageItem
+            ? (pricingByTakeoffId.get(applyPackageItem.id) ?? null)
+            : null
+        }
+        open={Boolean(applyPackageItem)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setApplyPackageItem(null);
+          }
+        }}
       />
 
       <AddPricingItemDialog
@@ -91,10 +168,10 @@ export function ProjectPricingPanel({
         onOpenChange={(open) => {
           setAddDialogOpen(open);
           if (!open) {
-            setInitialTakeoffItemId(null);
+            setAddDialogTakeoffId(null);
           }
         }}
-        initialTakeoffItemId={initialTakeoffItemId}
+        initialTakeoffItemId={addDialogTakeoffId}
       />
     </div>
   );

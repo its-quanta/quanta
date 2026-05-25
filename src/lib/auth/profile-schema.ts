@@ -34,7 +34,10 @@ export function isMissingColumnError(message: string): boolean {
 }
 
 export function isRlsPolicyError(message: string): boolean {
-  return /row-level security policy/i.test(message);
+  return (
+    /row-level security/i.test(message) ||
+    /permission denied for table/i.test(message)
+  );
 }
 
 export function isMissingTableError(message: string): boolean {

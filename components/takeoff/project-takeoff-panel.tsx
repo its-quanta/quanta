@@ -7,13 +7,24 @@ import {
 } from "@/components/ui/card";
 import { TakeoffSummary } from "@/components/takeoff/takeoff-summary";
 import { TakeoffTable } from "@/components/takeoff/takeoff-table";
-import type { Document, DocumentPage, TakeoffItem } from "@/src/types/database";
+import type {
+  AssemblyPackage,
+  Document,
+  DocumentPage,
+  PricingItem,
+  TakeoffItem,
+  TakeoffItemAssemblyWithPackage,
+} from "@/src/types/database";
 
 type ProjectTakeoffPanelProps = {
   projectId: string;
   items: TakeoffItem[];
   documents: Document[];
   documentPages: DocumentPage[];
+  assemblyPackages: AssemblyPackage[];
+  takeoffAssemblies: TakeoffItemAssemblyWithPackage[];
+  pricingItems: PricingItem[];
+  onPriceManual?: (takeoffItemId: string) => void;
 };
 
 export function ProjectTakeoffPanel({
@@ -21,6 +32,10 @@ export function ProjectTakeoffPanel({
   items,
   documents,
   documentPages,
+  assemblyPackages,
+  takeoffAssemblies,
+  pricingItems,
+  onPriceManual,
 }: ProjectTakeoffPanelProps) {
   return (
     <div className="flex flex-col gap-6">
@@ -40,6 +55,10 @@ export function ProjectTakeoffPanel({
             items={items}
             documents={documents}
             documentPages={documentPages}
+            assemblyPackages={assemblyPackages}
+            takeoffAssemblies={takeoffAssemblies}
+            pricingItems={pricingItems}
+            onPriceManual={onPriceManual}
           />
         </CardContent>
       </Card>

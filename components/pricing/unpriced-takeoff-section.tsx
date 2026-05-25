@@ -14,11 +14,15 @@ import type { TakeoffItem } from "@/src/types/database";
 type UnpricedTakeoffSectionProps = {
   items: TakeoffItem[];
   onAddPricing: (takeoffItemId: string) => void;
+  onApplyPackage?: (takeoffItemId: string) => void;
+  canApplyPackage?: boolean;
 };
 
 export function UnpricedTakeoffSection({
   items,
   onAddPricing,
+  onApplyPackage,
+  canApplyPackage = false,
 }: UnpricedTakeoffSectionProps) {
   if (items.length === 0) {
     return null;
@@ -52,6 +56,16 @@ export function UnpricedTakeoffSection({
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <Badge variant="outline">{item.status.replace("_", " ")}</Badge>
+                {canApplyPackage && onApplyPackage ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onApplyPackage(item.id)}
+                  >
+                    Apply package
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   size="sm"
