@@ -9,9 +9,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ProjectDocumentsPanel } from "@/components/documents/project-documents-panel";
+import { ProjectPricingPanel } from "@/components/pricing/project-pricing-panel";
 import { ProjectTakeoffPanel } from "@/components/takeoff/project-takeoff-panel";
 import { ProjectStatusBadge } from "@/components/projects/project-status-badge";
 import { formatCurrency, formatDate } from "@/src/lib/format";
+import type { PricingItemWithTakeoff } from "@/src/lib/pricing/queries";
 import type { Document, DocumentPage, Project, TakeoffItem } from "@/src/types/database";
 
 const workspaceTabs = [
@@ -30,6 +32,7 @@ type ProjectWorkspaceTabsProps = {
   documents: Document[];
   documentPages: DocumentPage[];
   takeoffItems: TakeoffItem[];
+  pricingItems: PricingItemWithTakeoff[];
 };
 
 function TabEmptyState({
@@ -119,6 +122,7 @@ export function ProjectWorkspaceTabs({
   documents,
   documentPages,
   takeoffItems,
+  pricingItems,
 }: ProjectWorkspaceTabsProps) {
   return (
     <Tabs defaultValue="overview" className="gap-4">
@@ -163,9 +167,10 @@ export function ProjectWorkspaceTabs({
         />
       </TabsContent>
       <TabsContent value="pricing">
-        <TabEmptyState
-          title="Pricing"
-          description="Margin, markup, and sell price totals will be calculated here."
+        <ProjectPricingPanel
+          projectId={project.id}
+          pricingItems={pricingItems}
+          takeoffItems={takeoffItems}
         />
       </TabsContent>
       <TabsContent value="clarifications">

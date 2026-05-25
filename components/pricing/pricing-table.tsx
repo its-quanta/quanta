@@ -1,0 +1,311 @@
+"use client";
+
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Add01Icon, Delete02Icon, Edit02Icon } from "@hugeicons/core-free-icons";
+
+import { EditPricingItemDialog } from "@/components/pricing/edit-pricing-item-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { deletePricingItemAction } from "@/src/lib/pricing/actions";
+import { formatPricingMethodLabel } from "@/src/lib/pricing/constants";
+import type { PricingItemWithTakeoff } from "@/src/lib/pricing/queries";
+import { formatCurrency, formatPercent } from "@/src/lib/format";
+
+type PricingTableProps = {
+  projectId: string;
+  pricingItems: PricingItemWithTakeoff[];
+  onAddPricing: () => void;
+};
+
+function formatOptionalPercent(value: number | null): string {
+  if (value === null || value === undefined) {
+    return "—";
+  }
+  return formatPercent(value);
+}
+
+export function PricingTable({
+  projectId,
+  pricingItems: initialItems,
+  onAddPricing,
+}: PricingTableProps) {
+  const router = useRouter();
+  const [items, setItems] = useState(initialItems);
+  const [isPending, startTransition] = useTransition();
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [editItem, setEditItem] = useState<PricingItemWithTakeoff | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PricingItemWithTakeoff | null>(
+    null
+  );
+
+  useEffect(() => {
+    setItems(initialItems);
+  }, [initialItems]);
+
+  function handleDelete() {
+    if (!deleteTarget) {
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await deletePricingItemAction(deleteTarget.id, projectId);
+
+      if (result.error) {
+        setActionError(result.error);
+        return;
+      }
+
+      setDeleteTarget(null);
+      setSuccessMessage("Pricing line removed.");
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-foreground">Pricing schedule</p>
+          <p className="text-xs text-muted-foreground">
+            {items.length} priced line{items.length === 1 ? "" : "s"}
+          </p>
+        </div>
+        <Button type="button" onClick={onAddPricing}>
+          <HugeiconsIcon icon={Add01Icon} className="size-4" />
+          Add pricing item
+        </Button>
+      </div>
+
+      {successMessage ? (
+        <p className="text-sm text-emerald-700" role="status">
+          {successMessage}
+        </p>
+      ) : null}
+
+      {actionError ? (
+        <p className="text-sm text-destructive" role="alert">
+          {actionError}
+        </p>
+      ) : null}
+
+      {items.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border px-6 py-10 text-center">
+          <p className="text-sm text-muted-foreground">
+            No pricing lines yet. Add pricing from a takeoff item to build your
+            bid totals.
+          </p>
+          <Button
+            type="button"
+            className="mt-4"
+            onClick={onAddPricing}
+          >
+            Add first pricing line
+          </Button>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
+              <TableRow>
+                <TableHead scope="col">Takeoff item</TableHead>
+                <TableHead scope="col">Method</TableHead>
+                <TableHead scope="col" className="text-right">
+                  Qty
+                </TableHead>
+                <TableHead scope="col">Unit</TableHead>
+                <TableHead scope="col" className="text-right">
+                  Cost rate
+                </TableHead>
+                <TableHead scope="col" className="text-right">
+                  Total cost
+                </TableHead>
+                <TableHead scope="col" className="text-right">
+                  Markup %
+                </TableHead>
+                <TableHead scope="col" className="text-right">
+                  Margin %
+                </TableHead>
+                <TableHead scope="col" className="text-right">
+                  Sell rate
+                </TableHead>
+                <TableHead scope="col" className="text-right">
+                  Total sell
+                </TableHead>
+                <TableHead scope="col" className="text-right">
+                  Gross profit
+                </TableHead>
+                <TableHead scope="col">Notes</TableHead>
+                <TableHead scope="col" className="w-[72px]">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    <div className="min-w-[140px]">
+                      <p className="text-sm font-medium">
+                        {item.takeoff_item.item_name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.takeoff_item.trade}
+                      </p>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
+                      {formatPricingMethodLabel(item.pricing_method)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm tabular-nums">
+                    {item.quantity}
+                  </TableCell>
+                  <TableCell className="text-sm">{item.unit}</TableCell>
+                  <TableCell className="text-right font-mono text-sm tabular-nums">
+                    {formatCurrency(item.cost_rate)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm tabular-nums">
+                    {formatCurrency(item.total_cost)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm tabular-nums">
+                    {formatOptionalPercent(item.markup_percentage)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm tabular-nums">
+                    {formatOptionalPercent(item.margin_percentage)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm tabular-nums">
+                    {formatCurrency(item.sell_rate)}
+                    {item.sell_rate_overridden ? (
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        (override)
+                      </span>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm tabular-nums">
+                    {formatCurrency(item.total_sell)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm tabular-nums text-emerald-700">
+                    {formatCurrency(item.gross_profit)}
+                  </TableCell>
+                  <TableCell className="max-w-[160px] truncate text-sm text-muted-foreground">
+                    {item.notes ?? "—"}
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          Actions
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setEditItem(item)}>
+                          <HugeiconsIcon
+                            icon={Edit02Icon}
+                            className="size-4"
+                          />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => setDeleteTarget(item)}
+                        >
+                          <HugeiconsIcon
+                            icon={Delete02Icon}
+                            className="size-4"
+                          />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <EditPricingItemDialog
+        projectId={projectId}
+        item={editItem}
+        open={editItem !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditItem(null);
+          }
+        }}
+        onSuccess={(message) => {
+          setSuccessMessage(message);
+          setActionError(null);
+        }}
+      />
+
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete pricing line?</DialogTitle>
+            <DialogDescription>
+              This removes pricing for{" "}
+              <span className="font-medium text-foreground">
+                {deleteTarget?.takeoff_item.item_name}
+              </span>
+              . The takeoff line may revert to needs review if no other pricing
+              exists.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              disabled={isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isPending}
+            >
+              {isPending ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

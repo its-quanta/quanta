@@ -37,6 +37,13 @@ export function isRlsPolicyError(message: string): boolean {
   return /row-level security policy/i.test(message);
 }
 
+export function isMissingTableError(message: string): boolean {
+  return (
+    /Could not find the table/i.test(message) ||
+    /relation .+ does not exist/i.test(message)
+  );
+}
+
 export function normalizeProfileRole(
   role: string | null | undefined
 ): ProfileRole | null {

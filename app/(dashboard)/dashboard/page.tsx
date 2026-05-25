@@ -12,17 +12,19 @@ import { getTakeoffSummaryForOrganisation } from "@/src/lib/dashboard/queries";
 import { buildTenderCommandCentreData } from "@/src/lib/dashboard/stats";
 import { requireOrganisationProfile } from "@/src/lib/auth/require-profile";
 import { getProjectsForOrganisation } from "@/src/lib/projects/queries";
+import { getRateLibrarySummary } from "@/src/lib/rates/queries";
 
 export default async function DashboardPage() {
   const { profile } = await requireOrganisationProfile();
   const organisationId = profile.organisation_id;
 
-  const [projects, takeoffRows] = await Promise.all([
+  const [projects, takeoffRows, rateSummary] = await Promise.all([
     getProjectsForOrganisation(organisationId),
     getTakeoffSummaryForOrganisation(organisationId),
+    getRateLibrarySummary(organisationId),
   ]);
 
-  const data = buildTenderCommandCentreData(projects, takeoffRows);
+  const data = buildTenderCommandCentreData(projects, takeoffRows, rateSummary);
   const welcomeName = profile.full_name?.split(" ")[0] ?? "there";
 
   return (

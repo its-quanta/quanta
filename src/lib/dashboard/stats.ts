@@ -5,6 +5,8 @@ import {
   daysUntil,
 } from "@/src/lib/format";
 import type { TakeoffSummaryRow } from "@/src/lib/dashboard/queries";
+import type { RateLibrarySummary } from "@/src/lib/rates/queries";
+import { OUTDATED_SUPPLIER_RATE_DAYS } from "@/src/lib/rates/constants";
 
 const ACTIVE_STATUSES = new Set<ProjectStatus>([
   "draft",
@@ -199,7 +201,8 @@ function isDueSoon(project: Project, withinDays = 14): boolean {
 
 export function buildTenderCommandCentreData(
   projects: Project[],
-  takeoffRows: TakeoffSummaryRow[]
+  takeoffRows: TakeoffSummaryRow[],
+  rateSummary?: RateLibrarySummary | null
 ): TenderCommandCentreData {
   const activeProjects = projects.filter((project) =>
     ACTIVE_STATUSES.has(project.status)
@@ -292,32 +295,51 @@ export function buildTenderCommandCentreData(
     },
   ];
 
-  // TODO: derive from material_rates table when rates library ships.
-  // TODO: derive from labour_rates table when rates library ships.
-  // TODO: derive from supplier_rates table when supplier linking ships.
-  // TODO: derive from rate revision dates for outdated count.
-  const ratesHealth: RatesHealthMetric[] = [
-    {
-      label: "Material rates",
-      value: "—",
-      hint: "Rates library not yet connected",
-    },
-    {
-      label: "Labour rates",
-      value: "—",
-      hint: "Rates library not yet connected",
-    },
-    {
-      label: "Supplier rates",
-      value: "—",
-      hint: "Supplier rate linking not yet connected",
-    },
-    {
-      label: "Outdated rates",
-      value: "—",
-      hint: "Revision tracking not yet connected",
-    },
-  ];
+  const ratesHealth: RatesHealthMetric[] = rateSummary
+    ? [
+        {
+          label: "Material rates",
+          value: String(rateSummary.materialCount),
+          hint: "Entries in your material library",
+        },
+        {
+          label: "Labour rates",
+          value: String(rateSummary.labourCount),
+          hint: "Roles in your labour library",
+        },
+        {
+          label: "Supplier rates",
+          value: String(rateSummary.supplierCount),
+          hint: "Supplier price list entries",
+        },
+        {
+          label: "Outdated rates",
+          value: String(rateSummary.outdatedSupplierCount),
+          hint: `Supplier rates not updated in ${OUTDATED_SUPPLIER_RATE_DAYS}+ days`,
+        },
+      ]
+    : [
+        {
+          label: "Material rates",
+          value: "—",
+          hint: "Open Rates to manage your library",
+        },
+        {
+          label: "Labour rates",
+          value: "—",
+          hint: "Open Rates to manage your library",
+        },
+        {
+          label: "Supplier rates",
+          value: "—",
+          hint: "Open Rates to manage your library",
+        },
+        {
+          label: "Outdated rates",
+          value: "—",
+          hint: "Open Rates to manage your library",
+        },
+      ];
 
   return {
     pipelineMetrics,

@@ -6,6 +6,7 @@ import { ProjectWorkspaceTabs } from "@/components/projects/project-workspace-ta
 import { formatCurrency, formatDate } from "@/src/lib/format";
 import { getDocumentPagesForProject } from "@/src/lib/documents/document-page-queries";
 import { getDocumentsForProject } from "@/src/lib/documents/queries";
+import { getPricingItemsForProject } from "@/src/lib/pricing/queries";
 import { getTakeoffItemsForProject } from "@/src/lib/takeoff/queries";
 import { requireOrganisationProfile } from "@/src/lib/auth/require-profile";
 import { getProjectById } from "@/src/lib/projects/queries";
@@ -23,10 +24,11 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     notFound();
   }
 
-  const [documents, documentPages, takeoffItems] = await Promise.all([
+  const [documents, documentPages, takeoffItems, pricingItems] = await Promise.all([
     getDocumentsForProject(project.id, profile.organisation_id),
     getDocumentPagesForProject(project.id, profile.organisation_id),
     getTakeoffItemsForProject(project.id, profile.organisation_id),
+    getPricingItemsForProject(project.id, profile.organisation_id),
   ]);
 
   return (
@@ -66,6 +68,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             documents={documents}
             documentPages={documentPages}
             takeoffItems={takeoffItems}
+            pricingItems={pricingItems}
           />
         </div>
       </main>
