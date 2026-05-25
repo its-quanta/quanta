@@ -14,6 +14,8 @@ import {
 import { createClient } from "@/src/lib/supabase/server";
 import type {
   OrganisationProfile,
+  TakeoffItem,
+  TakeoffItemStatus,
   TakeoffItemUpdate,
 } from "@/src/types/database";
 import type { User } from "@supabase/supabase-js";
@@ -29,11 +31,27 @@ export type CreateTakeoffItemInput = {
   description?: string | null;
   quantity?: number;
   unit?: string;
+  source_document_id?: string | null;
+  document_page_id?: string | null;
   drawing_reference?: string | null;
   page_number?: number | null;
+  sheet_number?: string | null;
+  detail_reference?: string | null;
+  specification_reference?: string | null;
   notes?: string | null;
-  source_document_id?: string | null;
+  status?: TakeoffItemStatus;
 };
+
+type DrawingReferenceInput = Pick<
+  CreateTakeoffItemInput,
+  | "source_document_id"
+  | "document_page_id"
+  | "drawing_reference"
+  | "page_number"
+  | "sheet_number"
+  | "detail_reference"
+  | "specification_reference"
+>;
 
 async function assertProjectAccess(
   projectId: string,
@@ -105,13 +123,84 @@ async function getNextSortOrder(
   return getNextTakeoffSortOrder(supabase, projectId, organisationId);
 }
 
+function resolveCreateStatus(
+  status: TakeoffItemStatus | undefined
+): { status: TakeoffItemStatus; reviewed: boolean } {
+  const resolved = status ?? "needs_review";
+
+  if (resolved === "reviewed") {
+    return { status: "reviewed", reviewed: true };
+  }
+
+  if (resolved === "priced") {
+    return { status: "priced", reviewed: true };
+  }
+
+  return { status: resolved, reviewed: false };
+}
+
+function appendDrawingReferenceFields(
+  target: Record<string, unknown>,
+  input: DrawingReferenceInput
+) {
+  const sourceDocumentId = input.source_document_id ?? null;
+  target.source_document_id = sourceDocumentId;
+  target.document_page_id = sourceDocumentId
+    ? (input.document_page_id ?? null)
+    : null;
+  target.drawing_reference = input.drawing_reference?.trim() || null;
+  target.page_number = input.page_number ?? null;
+  target.sheet_number = input.sheet_number?.trim() || null;
+  target.detail_reference = input.detail_reference?.trim() || null;
+  target.specification_reference =
+    input.specification_reference?.trim() || null;
+  target.confidence_score = null;
+}
+
+async function validateDocumentPageLink(
+  organisationId: string,
+  sourceDocumentId: string | null | undefined,
+  documentPageId: string | null | undefined
+): Promise<{ error?: string }> {
+  if (!documentPageId) {
+    return {};
+  }
+
+  if (!sourceDocumentId) {
+    return { error: "Select a source document before linking a page." };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("document_pages")
+    .select("id, document_id")
+    .eq("id", documentPageId)
+    .eq("organisation_id", organisationId)
+    .maybeSingle();
+
+  if (error) {
+    if (error.message.includes("document_pages")) {
+      return { error: "Document page linking is not available yet." };
+    }
+    return { error: error.message };
+  }
+
+  if (!data || data.document_id !== sourceDocumentId) {
+    return { error: "Selected page does not match the source document." };
+  }
+
+  return {};
+}
+
 function buildTakeoffInsertPayloads(
   organisationId: string,
   projectId: string,
   sortOrder: number,
   input: CreateTakeoffItemInput
 ) {
-  const shared = {
+  const { status, reviewed } = resolveCreateStatus(input.status);
+
+  const shared: Record<string, unknown> = {
     organisation_id: organisationId,
     project_id: projectId,
     trade: input.trade?.trim() || "General",
@@ -119,14 +208,13 @@ function buildTakeoffInsertPayloads(
     description: input.description?.trim() || null,
     quantity: input.quantity ?? 0,
     unit: input.unit?.trim() || "each",
-    drawing_reference: input.drawing_reference?.trim() || null,
-    page_number: input.page_number ?? null,
     notes: input.notes?.trim() || null,
-    source_document_id: input.source_document_id ?? null,
     ai_generated: false,
-    reviewed: false,
-    status: "needs_review",
+    reviewed,
+    status,
   };
+
+  appendDrawingReferenceFields(shared, input);
 
   return [
     { ...shared, sort_order: sortOrder },
@@ -142,13 +230,34 @@ function buildTakeoffInsertPayloads(
   ];
 }
 
-function sanitiseUpdate(
+function applyReviewWorkflow(
+  current: TakeoffItem,
   updates: TakeoffItemUpdate
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {};
 
   if (updates.source_document_id !== undefined) {
     payload.source_document_id = updates.source_document_id;
+    if (!updates.source_document_id) {
+      payload.document_page_id = null;
+    }
+  }
+
+  if (updates.document_page_id !== undefined) {
+    payload.document_page_id = updates.document_page_id;
+  }
+
+  if (updates.sheet_number !== undefined) {
+    payload.sheet_number = updates.sheet_number?.trim() || null;
+  }
+
+  if (updates.detail_reference !== undefined) {
+    payload.detail_reference = updates.detail_reference?.trim() || null;
+  }
+
+  if (updates.specification_reference !== undefined) {
+    payload.specification_reference =
+      updates.specification_reference?.trim() || null;
   }
 
   if (updates.trade !== undefined) {
@@ -183,18 +292,50 @@ function sanitiseUpdate(
     payload.notes = updates.notes;
   }
 
-  if (updates.status !== undefined) {
-    payload.status = updates.status;
-    if (updates.status === "reviewed" || updates.status === "priced") {
-      payload.reviewed = true;
-    }
-  }
+  const touchesReview =
+    updates.reviewed !== undefined || updates.status !== undefined;
 
-  if (updates.reviewed !== undefined) {
-    payload.reviewed = updates.reviewed;
-    if (updates.reviewed) {
-      payload.status = "reviewed";
+  if (touchesReview) {
+    let nextStatus = updates.status ?? current.status;
+    let nextReviewed =
+      updates.reviewed !== undefined ? updates.reviewed : current.reviewed;
+
+    if (updates.status !== undefined) {
+      nextStatus = updates.status;
+      if (updates.status === "reviewed" || updates.status === "priced") {
+        nextReviewed = true;
+      } else if (
+        updates.status === "needs_review" ||
+        updates.status === "draft" ||
+        updates.status === "ai_draft"
+      ) {
+        if (updates.reviewed !== true) {
+          nextReviewed = false;
+        }
+      }
     }
+
+    if (updates.reviewed === true) {
+      nextReviewed = true;
+      if (current.status === "priced") {
+        nextStatus = "priced";
+      } else if (current.status !== "excluded") {
+        nextStatus =
+          updates.status && updates.status !== current.status
+            ? updates.status
+            : "reviewed";
+      }
+    }
+
+    if (updates.reviewed === false) {
+      nextReviewed = false;
+      if (current.status !== "excluded" && nextStatus !== "excluded") {
+        nextStatus = "needs_review";
+      }
+    }
+
+    payload.status = nextStatus;
+    payload.reviewed = nextReviewed;
   }
 
   return payload;
@@ -218,6 +359,10 @@ export async function createTakeoffItemAction(
     return { error: "Enter an item name." };
   }
 
+  if (input.status && !isTakeoffStatus(input.status)) {
+    return { error: "Invalid status." };
+  }
+
   if (input.quantity !== undefined && input.quantity < 0) {
     return { error: "Quantity cannot be negative." };
   }
@@ -234,6 +379,16 @@ export async function createTakeoffItemAction(
 
   if ("error" in session) {
     return { error: session.error };
+  }
+
+  const pageCheck = await validateDocumentPageLink(
+    session.profile.organisation_id,
+    input.source_document_id,
+    input.document_page_id
+  );
+
+  if (pageCheck.error) {
+    return { error: pageCheck.error };
   }
 
   const { profile } = session;
@@ -293,9 +448,57 @@ export async function updateTakeoffItemAction(
     return { error: session.error };
   }
 
-  const payload = sanitiseUpdate(updates);
+  const existing = await fetchTakeoffItem(
+    itemId,
+    session.profile.organisation_id
+  );
 
-  if (Object.keys(payload).length === 0) {
+  if (!existing || existing.project_id !== projectId) {
+    return { error: "Takeoff item not found." };
+  }
+
+  const nextSourceDocumentId =
+    updates.source_document_id !== undefined
+      ? updates.source_document_id
+      : existing.source_document_id;
+  const nextDocumentPageId =
+    updates.document_page_id !== undefined
+      ? updates.document_page_id
+      : existing.document_page_id;
+
+  const pageCheck = await validateDocumentPageLink(
+    session.profile.organisation_id,
+    nextSourceDocumentId,
+    nextDocumentPageId
+  );
+
+  if (pageCheck.error) {
+    return { error: pageCheck.error };
+  }
+
+  const payload = applyReviewWorkflow(existing, updates);
+
+  const fieldKeys = [
+    "source_document_id",
+    "document_page_id",
+    "trade",
+    "item_name",
+    "description",
+    "quantity",
+    "unit",
+    "drawing_reference",
+    "page_number",
+    "sheet_number",
+    "detail_reference",
+    "specification_reference",
+    "notes",
+    "status",
+    "reviewed",
+  ] as const;
+
+  const hasChanges = fieldKeys.some((key) => key in updates);
+
+  if (!hasChanges) {
     return {};
   }
 
@@ -387,14 +590,19 @@ export async function duplicateTakeoffItemAction(
       sortOrder,
       {
         trade: source.trade,
-        item_name: source.item_name ? `${source.item_name} (copy)` : "",
+        item_name: source.item_name,
         description: source.description,
         quantity: source.quantity,
         unit: source.unit,
+        source_document_id: source.source_document_id,
+        document_page_id: source.document_page_id,
         drawing_reference: source.drawing_reference,
         page_number: source.page_number,
+        sheet_number: source.sheet_number,
+        detail_reference: source.detail_reference,
+        specification_reference: source.specification_reference,
         notes: source.notes,
-        source_document_id: source.source_document_id,
+        status: "needs_review",
       }
     )
   );
@@ -412,8 +620,55 @@ export async function markTakeoffItemReviewedAction(
   itemId: string,
   projectId: string
 ): Promise<TakeoffActionResult> {
+  const session = await requireTakeoffSession(projectId);
+
+  if ("error" in session) {
+    return { error: session.error };
+  }
+
+  const existing = await fetchTakeoffItem(
+    itemId,
+    session.profile.organisation_id
+  );
+
+  if (!existing || existing.project_id !== projectId) {
+    return { error: "Takeoff item not found." };
+  }
+
+  const status: TakeoffItemStatus =
+    existing.status === "priced" ? "priced" : "reviewed";
+
   return updateTakeoffItemAction(itemId, projectId, {
     reviewed: true,
-    status: "reviewed",
+    status,
+  });
+}
+
+export async function markTakeoffItemUnreviewedAction(
+  itemId: string,
+  projectId: string
+): Promise<TakeoffActionResult> {
+  const session = await requireTakeoffSession(projectId);
+
+  if ("error" in session) {
+    return { error: session.error };
+  }
+
+  const existing = await fetchTakeoffItem(
+    itemId,
+    session.profile.organisation_id
+  );
+
+  if (!existing || existing.project_id !== projectId) {
+    return { error: "Takeoff item not found." };
+  }
+
+  if (existing.status === "excluded") {
+    return updateTakeoffItemAction(itemId, projectId, { reviewed: false });
+  }
+
+  return updateTakeoffItemAction(itemId, projectId, {
+    reviewed: false,
+    status: "needs_review",
   });
 }

@@ -81,7 +81,11 @@ function isScopeGap(row: TakeoffSummaryRow): boolean {
     return false;
   }
 
-  if (row.status === "needs_review" || row.status === "ai_draft") {
+  if (
+    row.status === "draft" ||
+    row.status === "needs_review" ||
+    row.status === "ai_draft"
+  ) {
     return true;
   }
 

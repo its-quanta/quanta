@@ -127,6 +127,20 @@ Tender files uploaded to a project (Storage object + metadata). Private bucket `
 | uploaded_by | uuid | FK → auth.users |
 | created_at | timestamptz | |
 
+### document_pages
+
+Indexed pages/sheets within an uploaded document. Populated when document processing indexes pages (future AI workflows). Used for structured takeoff links via `takeoff_items.document_page_id`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | uuid | PK |
+| organisation_id | uuid | FK (denormalised for RLS) |
+| document_id | uuid | FK → documents |
+| page_number | integer | 1-based page index, unique per document |
+| sheet_number | text | Optional sheet label (e.g. S-101) |
+| sheet_title | text | Optional title from index |
+| created_at, updated_at | timestamptz | |
+
 ### project_documents (legacy name in early docs)
 
 Superseded by `documents` for MVP implementation. See `documents` above.
@@ -141,6 +155,7 @@ Quantity lines for manual takeoff. Manual entry is source of truth; AI drafts us
 | organisation_id | uuid | FK (denormalised for RLS) |
 | project_id | uuid | FK |
 | source_document_id | uuid | Optional FK → documents |
+| document_page_id | uuid | Optional FK → document_pages (structured page/sheet link) |
 | pricing_package_id | uuid | Nullable FK → pricing_packages; set when user applies a package |
 | package_applied_at | timestamptz | Optional; when package last exploded |
 | trade | text | e.g. Carpentry, Ceilings, or custom |
@@ -148,9 +163,12 @@ Quantity lines for manual takeoff. Manual entry is source of truth; AI drafts us
 | description | text | Scope detail |
 | quantity | numeric | User-entered, ≥ 0 |
 | unit | text | sqm, lm, each, custom, etc. |
-| drawing_reference | text | Drawing number |
-| page_number | integer | Optional page on linked drawing |
-| confidence_score | numeric | Optional 0–1 (AI only in future) |
+| drawing_reference | text | Drawing number (editable; not sole reference) |
+| page_number | integer | Optional page on linked drawing (MVP manual) |
+| sheet_number | text | Optional sheet label |
+| detail_reference | text | Optional detail callout |
+| specification_reference | text | Optional spec clause (e.g. §08.21) |
+| confidence_score | numeric | Optional 0–1 (AI proposals; manual lines null) |
 | ai_generated | boolean | Default false for manual |
 | reviewed | boolean | User verification flag |
 | status | enum | `ai_draft`, `needs_review`, `reviewed`, `priced`, `excluded` |

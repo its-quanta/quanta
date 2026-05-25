@@ -3,7 +3,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isMissingColumnError, isRlsPolicyError } from "@/src/lib/auth/profile-schema";
 import type { TakeoffItem, TakeoffItemStatus } from "@/src/types/database";
 
-/** Full manual takeoff schema. */
+/** Full schema with structured drawing references. */
+export const TAKEOFF_STRUCTURED_SELECT =
+  "id, organisation_id, project_id, source_document_id, document_page_id, trade, item_name, description, quantity, unit, drawing_reference, page_number, sheet_number, detail_reference, specification_reference, confidence_score, ai_generated, reviewed, status, notes, sort_order, created_at, updated_at" as const;
+
+/** Manual takeoff before structured reference columns. */
 export const TAKEOFF_EXTENDED_SELECT =
   "id, organisation_id, project_id, source_document_id, trade, item_name, description, quantity, unit, drawing_reference, page_number, confidence_score, ai_generated, reviewed, status, notes, sort_order, created_at, updated_at" as const;
 
@@ -20,6 +24,7 @@ export const TAKEOFF_MINIMAL_SELECT =
   "id, organisation_id, project_id, description, quantity, unit, notes, created_at, updated_at" as const;
 
 const TAKEOFF_SELECT_FALLBACKS = [
+  TAKEOFF_STRUCTURED_SELECT,
   TAKEOFF_EXTENDED_SELECT,
   TAKEOFF_STANDARD_SELECT,
   TAKEOFF_LEGACY_SELECT,
@@ -33,6 +38,7 @@ export type TakeoffItemRow = {
   created_at: string;
   updated_at?: string;
   source_document_id?: string | null;
+  document_page_id?: string | null;
   trade?: string | null;
   item_name?: string | null;
   item_code?: string | null;
@@ -42,6 +48,9 @@ export type TakeoffItemRow = {
   unit?: string | null;
   drawing_reference?: string | null;
   page_number?: number | null;
+  sheet_number?: string | null;
+  detail_reference?: string | null;
+  specification_reference?: string | null;
   confidence_score?: number | null;
   ai_generated?: boolean | null;
   reviewed?: boolean | null;
@@ -52,6 +61,7 @@ export type TakeoffItemRow = {
 };
 
 const TAKEOFF_STATUSES = new Set<string>([
+  "draft",
   "ai_draft",
   "needs_review",
   "reviewed",
@@ -85,6 +95,7 @@ export function normalizeTakeoffItem(row: TakeoffItemRow): TakeoffItem {
     organisation_id: row.organisation_id,
     project_id: row.project_id,
     source_document_id: row.source_document_id ?? null,
+    document_page_id: row.document_page_id ?? null,
     trade: row.trade ?? "General",
     item_name: itemName,
     description:
@@ -96,6 +107,9 @@ export function normalizeTakeoffItem(row: TakeoffItemRow): TakeoffItem {
       row.page_number === null || row.page_number === undefined
         ? null
         : Number(row.page_number),
+    sheet_number: row.sheet_number ?? null,
+    detail_reference: row.detail_reference ?? null,
+    specification_reference: row.specification_reference ?? null,
     confidence_score:
       row.confidence_score === null || row.confidence_score === undefined
         ? null

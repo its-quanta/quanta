@@ -7,6 +7,7 @@ import {
   TakeoffFormFields,
   defaultTakeoffFormValues,
   parseTakeoffFormValues,
+  takeoffItemToFormValues,
   type TakeoffFormValues,
 } from "@/components/takeoff/takeoff-form-fields";
 import { Button } from "@/components/ui/button";
@@ -18,11 +19,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { createTakeoffItemAction } from "@/src/lib/takeoff/actions";
-import type { Document, DocumentPage } from "@/src/types/database";
+import { updateTakeoffItemAction } from "@/src/lib/takeoff/actions";
+import type { Document, DocumentPage, TakeoffItem } from "@/src/types/database";
 
-type AddTakeoffItemDialogProps = {
+type EditTakeoffItemDialogProps = {
   projectId: string;
+  item: TakeoffItem | null;
   documents: Document[];
   documentPages: DocumentPage[];
   open: boolean;
@@ -30,25 +32,26 @@ type AddTakeoffItemDialogProps = {
   onSuccess?: (message: string) => void;
 };
 
-export function AddTakeoffItemDialog({
+export function EditTakeoffItemDialog({
   projectId,
+  item,
   documents,
   documentPages,
   open,
   onOpenChange,
   onSuccess,
-}: AddTakeoffItemDialogProps) {
+}: EditTakeoffItemDialogProps) {
   const router = useRouter();
   const [form, setForm] = useState<TakeoffFormValues>(defaultTakeoffFormValues);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
-    if (!open) {
-      setForm(defaultTakeoffFormValues);
+    if (open && item) {
+      setForm(takeoffItemToFormValues(item));
       setErrorMessage(null);
     }
-  }, [open]);
+  }, [open, item]);
 
   function updateField<K extends keyof TakeoffFormValues>(
     key: K,
@@ -67,8 +70,27 @@ export function AddTakeoffItemDialog({
       return;
     }
 
+    if (!item) {
+      return;
+    }
+
     startTransition(async () => {
-      const result = await createTakeoffItemAction(projectId, parsed.data!);
+      const result = await updateTakeoffItemAction(item.id, projectId, {
+        trade: parsed.data!.trade,
+        item_name: parsed.data!.item_name,
+        description: parsed.data!.description,
+        quantity: parsed.data!.quantity,
+        unit: parsed.data!.unit,
+        drawing_reference: parsed.data!.drawing_reference,
+        page_number: parsed.data!.page_number,
+        sheet_number: parsed.data!.sheet_number,
+        detail_reference: parsed.data!.detail_reference,
+        specification_reference: parsed.data!.specification_reference,
+        notes: parsed.data!.notes,
+        source_document_id: parsed.data!.source_document_id,
+        document_page_id: parsed.data!.document_page_id,
+        status: parsed.data!.status,
+      });
 
       if (result.error) {
         setErrorMessage(result.error);
@@ -76,18 +98,18 @@ export function AddTakeoffItemDialog({
       }
 
       onOpenChange(false);
-      onSuccess?.(`${parsed.data!.item_name} added to takeoff.`);
+      onSuccess?.(`${parsed.data!.item_name} updated.`);
       router.refresh();
     });
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Add takeoff item</DialogTitle>
+          <DialogTitle>Edit takeoff item</DialogTitle>
           <DialogDescription>
-            Enter quantity line details from drawings or tender documents.
+            Update scope line details. Changes save when you submit.
           </DialogDescription>
         </DialogHeader>
 
@@ -97,8 +119,9 @@ export function AddTakeoffItemDialog({
             onChange={updateField}
             documents={documents}
             documentPages={documentPages}
-            disabled={isPending}
-            idPrefix="add-takeoff"
+            disabled={isPending || !item}
+            idPrefix="edit-takeoff"
+            editingItem={item}
           />
 
           {errorMessage ? (
@@ -116,8 +139,8 @@ export function AddTakeoffItemDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Adding…" : "Add item"}
+            <Button type="submit" disabled={isPending || !item}>
+              {isPending ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>
         </form>

@@ -12,35 +12,44 @@ type TakeoffSummaryProps = {
 };
 
 export function TakeoffSummary({ items }: TakeoffSummaryProps) {
-  const { totalItems, itemsReviewed, itemsOutstanding } =
-    computeTakeoffTotals(items);
+  const {
+    totalItems,
+    reviewedItems,
+    outstandingItems,
+    pricedItems,
+    excludedItems,
+  } = computeTakeoffTotals(items);
+
+  const cards: { label: string; value: number; accent?: string }[] = [
+    { label: "Total items", value: totalItems },
+    { label: "Reviewed items", value: reviewedItems, accent: "text-emerald-700" },
+    {
+      label: "Outstanding items",
+      value: outstandingItems,
+      accent: "text-amber-800",
+    },
+    { label: "Priced items", value: pricedItems, accent: "text-primary" },
+    {
+      label: "Excluded items",
+      value: excludedItems,
+      accent: "text-muted-foreground",
+    },
+  ];
 
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
-      <Card size="sm">
-        <CardHeader>
-          <CardDescription>Total items</CardDescription>
-          <CardTitle className="font-mono text-2xl tabular-nums">
-            {totalItems}
-          </CardTitle>
-        </CardHeader>
-      </Card>
-      <Card size="sm">
-        <CardHeader>
-          <CardDescription>Items reviewed</CardDescription>
-          <CardTitle className="font-mono text-2xl tabular-nums text-emerald-700 dark:text-emerald-400">
-            {itemsReviewed}
-          </CardTitle>
-        </CardHeader>
-      </Card>
-      <Card size="sm">
-        <CardHeader>
-          <CardDescription>Items outstanding</CardDescription>
-          <CardTitle className="font-mono text-2xl tabular-nums text-amber-800 dark:text-amber-400">
-            {itemsOutstanding}
-          </CardTitle>
-        </CardHeader>
-      </Card>
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      {cards.map((card) => (
+        <Card key={card.label} size="sm">
+          <CardHeader>
+            <CardDescription>{card.label}</CardDescription>
+            <CardTitle
+              className={`font-mono text-2xl tabular-nums ${card.accent ?? ""}`}
+            >
+              {card.value}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+      ))}
     </div>
   );
 }

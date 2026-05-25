@@ -120,7 +120,20 @@ export type Document = {
   created_at: string;
 };
 
+/** Indexed page/sheet within an uploaded document (for structured takeoff links). */
+export type DocumentPage = {
+  id: string;
+  organisation_id: string;
+  document_id: string;
+  page_number: number;
+  sheet_number: string | null;
+  sheet_title: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type TakeoffItemStatus =
+  | "draft"
   | "ai_draft"
   | "needs_review"
   | "reviewed"
@@ -132,6 +145,7 @@ export type TakeoffItem = {
   organisation_id: string;
   project_id: string;
   source_document_id: string | null;
+  document_page_id: string | null;
   trade: string;
   item_name: string;
   description: string | null;
@@ -139,6 +153,9 @@ export type TakeoffItem = {
   unit: string;
   drawing_reference: string | null;
   page_number: number | null;
+  sheet_number: string | null;
+  detail_reference: string | null;
+  specification_reference: string | null;
   confidence_score: number | null;
   ai_generated: boolean;
   reviewed: boolean;
@@ -153,6 +170,7 @@ export type TakeoffItemUpdate = Partial<
   Pick<
     TakeoffItem,
     | "source_document_id"
+    | "document_page_id"
     | "trade"
     | "item_name"
     | "description"
@@ -160,6 +178,9 @@ export type TakeoffItemUpdate = Partial<
     | "unit"
     | "drawing_reference"
     | "page_number"
+    | "sheet_number"
+    | "detail_reference"
+    | "specification_reference"
     | "notes"
     | "status"
     | "reviewed"

@@ -12,7 +12,7 @@ export function TakeoffStatusBadge({ status }: TakeoffStatusBadgeProps) {
     <Badge
       variant="outline"
       className={cn(
-        status === "ai_draft" &&
+        (status === "draft" || status === "ai_draft") &&
           "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-400",
         status === "needs_review" &&
           "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-400",

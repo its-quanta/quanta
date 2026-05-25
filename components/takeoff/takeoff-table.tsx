@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  useTransition,
-} from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   flexRender,
@@ -19,11 +13,20 @@ import {
   Add01Icon,
   Copy01Icon,
   Delete02Icon,
+  Edit02Icon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
 
 import { AddTakeoffItemDialog } from "@/components/takeoff/add-takeoff-item-dialog";
+import { EditTakeoffItemDialog } from "@/components/takeoff/edit-takeoff-item-dialog";
 import { TakeoffStatusBadge } from "@/components/takeoff/takeoff-status-badge";
+import {
+  defaultTakeoffFilters,
+  filterTakeoffItems,
+  TakeoffFiltersBar,
+  type TakeoffFilters,
+} from "@/components/takeoff/takeoff-filters-bar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -50,78 +53,80 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import {
-  cellInputClassName,
-  cellNumberClassName,
-  isTakeoffUnit,
-  selectClassName,
-  TAKEOFF_STATUSES,
-  TAKEOFF_TRADES,
-  TAKEOFF_UNITS,
-} from "@/src/lib/takeoff/constants";
-import {
   deleteTakeoffItemAction,
   duplicateTakeoffItemAction,
   markTakeoffItemReviewedAction,
-  updateTakeoffItemAction,
+  markTakeoffItemUnreviewedAction,
 } from "@/src/lib/takeoff/actions";
-import type { Document, TakeoffItem, TakeoffItemUpdate } from "@/src/types/database";
+import {
+  buildDrawingReferenceContext,
+  formatDrawingReferencePrimary,
+  formatDrawingReferenceSecondary,
+} from "@/src/lib/takeoff/drawing-reference";
+import type { Document, DocumentPage, TakeoffItem } from "@/src/types/database";
 
 type TakeoffTableProps = {
   projectId: string;
   items: TakeoffItem[];
   documents: Document[];
+  documentPages: DocumentPage[];
 };
-
-function unitSelectValue(unit: string): string {
-  return isTakeoffUnit(unit) ? unit : "custom";
-}
 
 export function TakeoffTable({
   projectId,
   items: initialItems,
   documents,
+  documentPages,
 }: TakeoffTableProps) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
+  const [filters, setFilters] = useState<TakeoffFilters>(defaultTakeoffFilters);
   const [isPending, startTransition] = useTransition();
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [editItem, setEditItem] = useState<TakeoffItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TakeoffItem | null>(null);
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
-  const [customUnits, setCustomUnits] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setItems(initialItems);
   }, [initialItems]);
 
-  const persistUpdate = useCallback(
-    (itemId: string, updates: TakeoffItemUpdate) => {
-      setActionError(null);
-      setPendingRowId(itemId);
-
-      setItems((current) =>
-        current.map((item) =>
-          item.id === itemId ? { ...item, ...updates } : item
-        )
-      );
-
-      startTransition(async () => {
-        const result = await updateTakeoffItemAction(itemId, projectId, updates);
-
-        setPendingRowId(null);
-
-        if (result.error) {
-          setActionError(result.error);
-          router.refresh();
-          return;
-        }
-
-        router.refresh();
-      });
-    },
-    [projectId, router]
+  const drawingContext = useMemo(
+    () => buildDrawingReferenceContext(documents, documentPages),
+    [documents, documentPages]
   );
+
+  const tradesInUse = useMemo(
+    () => Array.from(new Set(items.map((item) => item.trade))).sort(),
+    [items]
+  );
+
+  const filteredItems = useMemo(
+    () => filterTakeoffItems(items, filters),
+    [items, filters]
+  );
+
+  function runRowAction(
+    itemId: string,
+    action: () => Promise<{ error?: string }>
+  ) {
+    setActionError(null);
+    setPendingRowId(itemId);
+
+    startTransition(async () => {
+      const result = await action();
+      setPendingRowId(null);
+
+      if (result.error) {
+        setActionError(result.error);
+        return;
+      }
+
+      router.refresh();
+    });
+  }
 
   const columns = useMemo<ColumnDef<TakeoffItem>[]>(
     () => [
@@ -129,246 +134,115 @@ export function TakeoffTable({
         accessorKey: "trade",
         header: "Trade",
         cell: ({ row }) => (
-          <input
-            list="takeoff-trades"
-            className={cellInputClassName}
-            defaultValue={row.original.trade}
-            disabled={isPending && pendingRowId === row.original.id}
-            onBlur={(event) => {
-              const value = event.target.value.trim() || "General";
-              if (value !== row.original.trade) {
-                persistUpdate(row.original.id, { trade: value });
-              }
-            }}
-          />
+          <span className="text-sm">{row.original.trade}</span>
         ),
       },
       {
         accessorKey: "item_name",
         header: "Item",
         cell: ({ row }) => (
-          <input
-            className={cellInputClassName}
-            defaultValue={row.original.item_name}
-            placeholder="Line item"
-            disabled={isPending && pendingRowId === row.original.id}
-            onBlur={(event) => {
-              if (event.target.value !== row.original.item_name) {
-                persistUpdate(row.original.id, {
-                  item_name: event.target.value,
-                });
-              }
-            }}
-          />
+          <span className="font-medium text-foreground">
+            {row.original.item_name}
+          </span>
         ),
       },
       {
         accessorKey: "description",
         header: "Description",
         cell: ({ row }) => (
-          <input
-            className={cellInputClassName}
-            defaultValue={row.original.description ?? ""}
-            placeholder="Scope detail"
-            disabled={isPending && pendingRowId === row.original.id}
-            onBlur={(event) => {
-              const value = event.target.value.trim() || null;
-              if (value !== (row.original.description ?? "")) {
-                persistUpdate(row.original.id, { description: value });
-              }
-            }}
-          />
+          <span className="max-w-[200px] truncate text-sm text-muted-foreground">
+            {row.original.description ?? "—"}
+          </span>
         ),
       },
       {
         accessorKey: "quantity",
         header: () => <span className="block text-right">Quantity</span>,
         cell: ({ row }) => (
-          <input
-            type="number"
-            min={0}
-            step="any"
-            className={cellNumberClassName}
-            defaultValue={row.original.quantity}
-            disabled={isPending && pendingRowId === row.original.id}
-            onBlur={(event) => {
-              const value = Number(event.target.value);
-              if (Number.isNaN(value)) {
-                return;
-              }
-
-              if (value !== row.original.quantity) {
-                persistUpdate(row.original.id, { quantity: value });
-              }
-            }}
-          />
+          <span className="block text-right font-mono text-sm tabular-nums">
+            {row.original.quantity}
+          </span>
         ),
       },
       {
         accessorKey: "unit",
         header: "Unit",
-        cell: ({ row }) => {
-          const selectValue = unitSelectValue(row.original.unit);
-          const customValue =
-            customUnits[row.original.id] ??
-            (selectValue === "custom" ? row.original.unit : "");
-
-          return (
-            <div className="flex min-w-[88px] flex-col gap-1">
-              <select
-                className={selectClassName}
-                value={selectValue}
-                disabled={isPending && pendingRowId === row.original.id}
-                onChange={(event) => {
-                  const next = event.target.value;
-
-                  if (next === "custom") {
-                    setCustomUnits((current) => ({
-                      ...current,
-                      [row.original.id]: customValue,
-                    }));
-                    return;
-                  }
-
-                  persistUpdate(row.original.id, { unit: next });
-                }}
-              >
-                {TAKEOFF_UNITS.map((unit) => (
-                  <option key={unit} value={unit}>
-                    {unit}
-                  </option>
-                ))}
-              </select>
-              {selectValue === "custom" ? (
-                <input
-                  className={cellInputClassName}
-                  value={customValue}
-                  placeholder="Custom unit"
-                  disabled={isPending && pendingRowId === row.original.id}
-                  onChange={(event) => {
-                    setCustomUnits((current) => ({
-                      ...current,
-                      [row.original.id]: event.target.value,
-                    }));
-                  }}
-                  onBlur={(event) => {
-                    const value = event.target.value.trim();
-                    if (value && value !== row.original.unit) {
-                      persistUpdate(row.original.id, { unit: value });
-                    }
-                  }}
-                />
-              ) : null}
-            </div>
-          );
-        },
+        cell: ({ row }) => (
+          <span className="font-mono text-sm tabular-nums">
+            {row.original.unit}
+          </span>
+        ),
       },
       {
-        id: "drawing",
+        id: "document",
+        header: "Document",
+        cell: ({ row }) => (
+          <span
+            className={cn(
+              "max-w-[160px] truncate text-sm",
+              !row.original.source_document_id && "text-muted-foreground"
+            )}
+          >
+            {formatDrawingReferenceSecondary(row.original, drawingContext) ??
+              "No document linked"}
+          </span>
+        ),
+      },
+      {
+        id: "drawing_reference",
         header: "Drawing Ref",
         cell: ({ row }) => (
-          <div className="flex min-w-[140px] flex-col gap-1">
-            <select
-              className={selectClassName}
-              value={row.original.source_document_id ?? ""}
-              disabled={isPending && pendingRowId === row.original.id}
-              onChange={(event) => {
-                persistUpdate(row.original.id, {
-                  source_document_id: event.target.value || null,
-                });
-              }}
-            >
-              <option value="">No linked document</option>
-              {documents.map((document) => (
-                <option key={document.id} value={document.id}>
-                  {document.file_name}
-                </option>
-              ))}
-            </select>
-            <input
-              className={cellInputClassName}
-              defaultValue={row.original.drawing_reference ?? ""}
-              placeholder="A-302"
-              disabled={isPending && pendingRowId === row.original.id}
-              onBlur={(event) => {
-                const value = event.target.value.trim() || null;
-                if (value !== (row.original.drawing_reference ?? "")) {
-                  persistUpdate(row.original.id, {
-                    drawing_reference: value,
-                  });
-                }
-              }}
-            />
-          </div>
+          <span className="max-w-[160px] font-mono text-sm tabular-nums">
+            {formatDrawingReferencePrimary(row.original, drawingContext)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "sheet_number",
+        header: "Sheet",
+        cell: ({ row }) => (
+          <span className="font-mono text-sm tabular-nums">
+            {row.original.sheet_number ?? "—"}
+          </span>
         ),
       },
       {
         accessorKey: "page_number",
         header: () => <span className="block text-right">Page</span>,
         cell: ({ row }) => (
-          <input
-            type="number"
-            min={1}
-            step={1}
-            className={cellNumberClassName}
-            defaultValue={row.original.page_number ?? ""}
-            disabled={isPending && pendingRowId === row.original.id}
-            onBlur={(event) => {
-              const raw = event.target.value.trim();
-              const value = raw.length > 0 ? Number(raw) : null;
-
-              if (raw.length > 0 && Number.isNaN(value)) {
-                return;
-              }
-
-              if (value !== row.original.page_number) {
-                persistUpdate(row.original.id, { page_number: value });
-              }
-            }}
-          />
+          <span className="block text-right font-mono text-sm tabular-nums">
+            {row.original.page_number ?? "—"}
+          </span>
         ),
       },
       {
         accessorKey: "status",
         header: "Status",
+        cell: ({ row }) => <TakeoffStatusBadge status={row.original.status} />,
+      },
+      {
+        accessorKey: "reviewed",
+        header: "Reviewed",
         cell: ({ row }) => (
-          <div className="flex min-w-[120px] flex-col gap-1.5">
-            <select
-              className={selectClassName}
-              value={row.original.status}
-              disabled={isPending && pendingRowId === row.original.id}
-              onChange={(event) => {
-                persistUpdate(row.original.id, {
-                  status: event.target.value as TakeoffItem["status"],
-                });
-              }}
-            >
-              {TAKEOFF_STATUSES.map((status) => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-            <TakeoffStatusBadge status={row.original.status} />
-          </div>
+          <Badge
+            variant="outline"
+            className={cn(
+              row.original.reviewed
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+                : "border-amber-500/30 bg-amber-500/10 text-amber-800"
+            )}
+          >
+            {row.original.reviewed ? "Yes" : "No"}
+          </Badge>
         ),
       },
       {
         accessorKey: "notes",
         header: "Notes",
         cell: ({ row }) => (
-          <input
-            className={cellInputClassName}
-            defaultValue={row.original.notes ?? ""}
-            placeholder="Internal note"
-            disabled={isPending && pendingRowId === row.original.id}
-            onBlur={(event) => {
-              const value = event.target.value.trim() || null;
-              if (value !== (row.original.notes ?? "")) {
-                persistUpdate(row.original.id, { notes: value });
-              }
-            }}
-          />
+          <span className="max-w-[140px] truncate text-sm text-muted-foreground">
+            {row.original.notes ?? "—"}
+          </span>
         ),
       },
       {
@@ -387,45 +261,35 @@ export function TakeoffTable({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => {
-                  setActionError(null);
-                  setPendingRowId(row.original.id);
-                  startTransition(async () => {
-                    const result = await markTakeoffItemReviewedAction(
-                      row.original.id,
-                      projectId
-                    );
-                    setPendingRowId(null);
-                    if (result.error) {
-                      setActionError(result.error);
-                    }
-                    router.refresh();
-                  });
-                }}
-              >
-                <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} />
-                Mark reviewed
+              <DropdownMenuItem onClick={() => setEditItem(row.original)}>
+                <HugeiconsIcon icon={Edit02Icon} strokeWidth={2} />
+                Edit
               </DropdownMenuItem>
+              {row.original.reviewed ? (
+                <DropdownMenuItem
+                  onClick={() => runRowAction(row.original.id, () =>
+                    markTakeoffItemUnreviewedAction(row.original.id, projectId)
+                  )}
+                >
+                  Mark unreviewed
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  onClick={() => runRowAction(row.original.id, () =>
+                    markTakeoffItemReviewedAction(row.original.id, projectId)
+                  )}
+                >
+                  <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} />
+                  Mark reviewed
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
-                onClick={() => {
-                  setActionError(null);
-                  setPendingRowId(row.original.id);
-                  startTransition(async () => {
-                    const result = await duplicateTakeoffItemAction(
-                      row.original.id,
-                      projectId
-                    );
-                    setPendingRowId(null);
-                    if (result.error) {
-                      setActionError(result.error);
-                    }
-                    router.refresh();
-                  });
-                }}
+                onClick={() => runRowAction(row.original.id, () =>
+                  duplicateTakeoffItemAction(row.original.id, projectId)
+                )}
               >
                 <HugeiconsIcon icon={Copy01Icon} strokeWidth={2} />
-                Duplicate item
+                Duplicate
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -433,26 +297,18 @@ export function TakeoffTable({
                 onClick={() => setDeleteTarget(row.original)}
               >
                 <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} />
-                Delete item
+                Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         ),
       },
     ],
-    [
-      customUnits,
-      documents,
-      isPending,
-      pendingRowId,
-      persistUpdate,
-      projectId,
-      router,
-    ]
+    [drawingContext, isPending, pendingRowId, projectId]
   );
 
   const table = useReactTable({
-    data: items,
+    data: filteredItems,
     columns,
     getCoreRowModel: getCoreRowModel(),
   });
@@ -468,11 +324,12 @@ export function TakeoffTable({
       return;
     }
 
+    const targetId = deleteTarget.id;
     setActionError(null);
-    setPendingRowId(deleteTarget.id);
+    setPendingRowId(targetId);
 
     startTransition(async () => {
-      const result = await deleteTakeoffItemAction(deleteTarget.id, projectId);
+      const result = await deleteTakeoffItemAction(targetId, projectId);
       setPendingRowId(null);
       setDeleteTarget(null);
 
@@ -485,23 +342,29 @@ export function TakeoffTable({
     });
   }
 
+  const hasAnyItems = items.length > 0;
+  const showFilteredEmpty = hasAnyItems && filteredItems.length === 0;
+
   return (
     <>
-      <datalist id="takeoff-trades">
-        {TAKEOFF_TRADES.map((trade) => (
-          <option key={trade} value={trade} />
-        ))}
-      </datalist>
-
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Enter quantities manually. Changes save when you leave a field.
+          Manual quantity lines — review each item before pricing.
         </p>
         <Button type="button" onClick={handleAddItem} disabled={isPending}>
           <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
           Add item
         </Button>
       </div>
+
+      {hasAnyItems ? (
+        <TakeoffFiltersBar
+          filters={filters}
+          onChange={setFilters}
+          documents={documents}
+          tradesInUse={tradesInUse}
+        />
+      ) : null}
 
       {actionError ? (
         <p className="text-sm text-destructive" role="alert">
@@ -518,13 +381,11 @@ export function TakeoffTable({
         </p>
       ) : null}
 
-      {items.length === 0 ? (
+      {!hasAnyItems ? (
         <div className="rounded-[10px] border border-dashed border-border bg-muted/20 px-6 py-10 text-center">
-          <p className="text-sm font-medium text-foreground">
-            No takeoff lines yet
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Add your first quantity line to start building this estimate.
+          <p className="text-sm text-muted-foreground">
+            Start building your takeoff by adding scope items from your drawings
+            or tender documents.
           </p>
           <Button
             type="button"
@@ -532,8 +393,14 @@ export function TakeoffTable({
             onClick={handleAddItem}
             disabled={isPending}
           >
-            Add first line
+            Add Takeoff Item
           </Button>
+        </div>
+      ) : showFilteredEmpty ? (
+        <div className="rounded-[10px] border border-dashed border-border bg-muted/20 px-6 py-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            No takeoff lines match your filters.
+          </p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg ring-1 ring-border">
@@ -584,8 +451,23 @@ export function TakeoffTable({
       <AddTakeoffItemDialog
         projectId={projectId}
         documents={documents}
+        documentPages={documentPages}
         open={addDialogOpen}
         onOpenChange={setAddDialogOpen}
+        onSuccess={setSuccessMessage}
+      />
+
+      <EditTakeoffItemDialog
+        projectId={projectId}
+        item={editItem}
+        documents={documents}
+        documentPages={documentPages}
+        open={Boolean(editItem)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditItem(null);
+          }
+        }}
         onSuccess={setSuccessMessage}
       />
 

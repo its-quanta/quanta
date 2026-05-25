@@ -12,7 +12,7 @@ import { ProjectDocumentsPanel } from "@/components/documents/project-documents-
 import { ProjectTakeoffPanel } from "@/components/takeoff/project-takeoff-panel";
 import { ProjectStatusBadge } from "@/components/projects/project-status-badge";
 import { formatCurrency, formatDate } from "@/src/lib/format";
-import type { Document, Project, TakeoffItem } from "@/src/types/database";
+import type { Document, DocumentPage, Project, TakeoffItem } from "@/src/types/database";
 
 const workspaceTabs = [
   { value: "overview", label: "Overview" },
@@ -28,6 +28,7 @@ const workspaceTabs = [
 type ProjectWorkspaceTabsProps = {
   project: Project;
   documents: Document[];
+  documentPages: DocumentPage[];
   takeoffItems: TakeoffItem[];
 };
 
@@ -116,6 +117,7 @@ function OverviewPanel({ project }: { project: Project }) {
 export function ProjectWorkspaceTabs({
   project,
   documents,
+  documentPages,
   takeoffItems,
 }: ProjectWorkspaceTabsProps) {
   return (
@@ -145,6 +147,7 @@ export function ProjectWorkspaceTabs({
           projectId={project.id}
           items={takeoffItems}
           documents={documents}
+          documentPages={documentPages}
         />
       </TabsContent>
       <TabsContent value="materials">

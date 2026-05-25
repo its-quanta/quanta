@@ -12,6 +12,7 @@ How AI fits into Quanta MVP. AI **assists** drafting; it does **not** replace us
 | Database truth | `takeoff_items`, `material_lines`, `labour_lines`, and pricing summaries are authoritative |
 | Traceability | Every run and bulk accept/reject is auditable |
 | Least context | Send only selected project documents and structured prompts — not the whole org |
+| Structured references | AI takeoff proposals must link to `source_document_id` and `document_page_id` where indexed; also populate `drawing_reference`, `sheet_number`, `detail_reference`, `specification_reference`, and `confidence_score` — not free-text drawing refs alone |
 
 ## What AI does in MVP
 
