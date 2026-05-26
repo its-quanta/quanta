@@ -19,6 +19,7 @@ import {
   getStandardsForOrganisation,
 } from "@/src/lib/standards/queries";
 import { getTakeoffItemAssembliesForProject } from "@/src/lib/takeoff-assembly/queries";
+import { getAiReviewItemsForProject } from "@/src/lib/ai-review/queries";
 import {
   getClarificationTemplatesForOrganisation,
   getClarificationsForProject,
@@ -59,6 +60,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     standardLinks,
     clarifications,
     clarificationTemplates,
+    aiReviewItems,
   ] = await Promise.all([
     getDocumentsForProject(project.id, profile.organisation_id),
     getDocumentPagesForProject(project.id, profile.organisation_id),
@@ -81,6 +83,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     getStandardLinksForProject(project.id, profile.organisation_id),
     getClarificationsForProject(project.id, profile.organisation_id),
     getClarificationTemplatesForOrganisation(profile.organisation_id),
+    getAiReviewItemsForProject(project.id, profile.organisation_id),
   ]);
 
   const { materialItems, labourItems, loadError: estimateLoadError } =
@@ -148,6 +151,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
               standardLinks={standardLinks}
               clarifications={clarifications}
               clarificationTemplates={clarificationTemplates}
+              aiReviewItems={aiReviewItems}
             />
           </Suspense>
         </div>

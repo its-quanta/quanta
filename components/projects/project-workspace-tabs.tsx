@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { AiReviewPanel } from "@/components/projects/ai-review-panel";
 import { CommercialReviewPanel } from "@/components/projects/commercial-review-panel";
 import { ProjectOverviewPanel } from "@/components/projects/project-overview-panel";
 import { ScopeReviewPanel } from "@/components/projects/scope-review-panel";
@@ -31,11 +32,13 @@ import type {
   TakeoffItem,
   TakeoffItemAssemblyWithPackage,
   TenderClarification,
+  AiReviewItem,
 } from "@/src/types/database";
 
 const workspaceTabs = [
   { value: "overview", label: "Overview" },
   { value: "tender-inputs", label: "Tender Inputs" },
+  { value: "ai-review", label: "AI Review" },
   { value: "scope-review", label: "Scope Review" },
   { value: "commercial-review", label: "Commercial Review" },
   { value: "submission", label: "Submission" },
@@ -59,6 +62,7 @@ type ProjectWorkspaceTabsProps = {
   standardLinks: StandardLink[];
   clarifications: TenderClarification[];
   clarificationTemplates: ClarificationTemplate[];
+  aiReviewItems: AiReviewItem[];
 };
 
 export function ProjectWorkspaceTabs({
@@ -79,6 +83,7 @@ export function ProjectWorkspaceTabs({
   standardLinks,
   clarifications,
   clarificationTemplates,
+  aiReviewItems,
 }: ProjectWorkspaceTabsProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -226,6 +231,16 @@ export function ProjectWorkspaceTabs({
         />
       </TabsContent>
 
+      <TabsContent value="ai-review">
+        <AiReviewPanel
+          projectId={project.id}
+          items={aiReviewItems}
+          documents={documents}
+          documentPages={documentPages}
+          scopeGapSummary={scopeGapSummary}
+        />
+      </TabsContent>
+
       <TabsContent value="scope-review">
         <ScopeReviewPanel
           projectId={project.id}
@@ -289,6 +304,8 @@ export function ProjectWorkspaceTabs({
           standardLinks={standardLinks}
           clarifications={clarifications}
           templates={clarificationTemplates}
+          scopeGapsTotal={scopeGapSummary.totalGaps}
+          exclusionsDraftedPercent={readiness.exclusionsDraftedPercent}
         />
       </TabsContent>
     </Tabs>

@@ -9,6 +9,7 @@ export type ScopeGapKind =
 export type WorkspaceTabValue =
   | "overview"
   | "tender-inputs"
+  | "ai-review"
   | "scope-review"
   | "commercial-review"
   | "submission";

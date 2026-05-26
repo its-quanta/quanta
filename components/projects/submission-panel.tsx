@@ -12,7 +12,9 @@ import { SubmissionReadinessSummary } from "@/components/submission/submission-r
 import { SubmissionStickyStatus } from "@/components/submission/submission-sticky-status";
 import { SubmissionTenderPackPanel } from "@/components/submission/submission-tender-pack-panel";
 import { SubmissionValidationAccordion } from "@/components/submission/submission-validation-accordion";
+import { SubmissionExportSection } from "@/components/export/submission-export-section";
 import { useOrganisationSettings } from "@/components/layout/organisation-settings-provider";
+import type { ExportProjectData } from "@/src/lib/export/types";
 import { buildSubmissionPreview } from "@/src/lib/submission/preview";
 import { buildTenderPackPreview } from "@/src/lib/submission/tender-pack-preview";
 import { validateTender } from "@/src/lib/submission/validate-tender";
@@ -41,6 +43,8 @@ type SubmissionPanelProps = {
   standardLinks: StandardLink[];
   clarifications: TenderClarification[];
   templates: ClarificationTemplate[];
+  scopeGapsTotal: number;
+  exclusionsDraftedPercent: number | null;
 };
 
 export function SubmissionPanel({
@@ -55,6 +59,8 @@ export function SubmissionPanel({
   standardLinks,
   clarifications,
   templates,
+  scopeGapsTotal,
+  exclusionsDraftedPercent,
 }: SubmissionPanelProps) {
   const { settings, currency } = useOrganisationSettings();
   const searchParams = useSearchParams();
@@ -63,6 +69,7 @@ export function SubmissionPanel({
   const exclusionsRef = useRef<HTMLDivElement>(null);
   const assumptionsRef = useRef<HTMLDivElement>(null);
   const rfisRef = useRef<HTMLDivElement>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewGeneratedAt, setPreviewGeneratedAt] = useState<string | null>(
     null
@@ -158,6 +165,37 @@ export function SubmissionPanel({
     [validation.issues]
   );
 
+  const exportData = useMemo<ExportProjectData>(
+    () => ({
+      project,
+      currency,
+      organisationSettings: settings,
+      pricingItems,
+      takeoffItems,
+      takeoffAssemblies,
+      materialItems,
+      labourItems,
+      clarifications,
+      documents,
+      scopeGapsTotal,
+      exclusionsDraftedPercent,
+    }),
+    [
+      project,
+      currency,
+      settings,
+      pricingItems,
+      takeoffItems,
+      takeoffAssemblies,
+      materialItems,
+      labourItems,
+      clarifications,
+      documents,
+      scopeGapsTotal,
+      exclusionsDraftedPercent,
+    ]
+  );
+
   const exclusions = clarifications.filter((row) => row.type === "exclusion");
   const assumptions = clarifications.filter((row) => row.type === "assumption");
   const rfis = clarifications.filter((row) => row.type === "rfi");
@@ -174,7 +212,9 @@ export function SubmissionPanel({
           ? assumptionsRef
           : sectionParam === "rfis"
             ? rfisRef
-            : null;
+            : sectionParam === "export"
+              ? exportRef
+              : null;
     if (target?.current) {
       target.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
@@ -241,6 +281,10 @@ export function SubmissionPanel({
             onPreviewPack={openTenderPackPreview}
           />
         </div>
+      </div>
+
+      <div ref={exportRef}>
+        <SubmissionExportSection exportData={exportData} />
       </div>
 
       <TenderPackPreviewModal

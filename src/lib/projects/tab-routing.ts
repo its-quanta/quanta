@@ -28,6 +28,7 @@ export function isWorkspaceTab(value: string): value is WorkspaceTabValue {
   return (
     value === "overview" ||
     value === "tender-inputs" ||
+    value === "ai-review" ||
     value === "scope-review" ||
     value === "commercial-review" ||
     value === "submission"

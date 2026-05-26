@@ -643,3 +643,42 @@ export type TenderClarificationInput = {
 };
 
 export type TenderClarificationUpdate = Partial<TenderClarificationInput>;
+
+export type AiReviewItemStatus =
+  | "pending"
+  | "accepted"
+  | "rejected"
+  | "adjusted";
+
+export type AiReviewConfidenceLevel = "high" | "medium" | "low";
+
+export type AiReviewItem = {
+  id: string;
+  organisation_id: string;
+  project_id: string;
+  status: AiReviewItemStatus;
+  confidence: number | null;
+  trade: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  reasoning: string | null;
+  source_document_id: string | null;
+  drawing_reference: string | null;
+  sheet_number: string | null;
+  page_number: number | null;
+  result_takeoff_item_id: string | null;
+  accepted_by: string | null;
+  accepted_at: string | null;
+  review_notes: string | null;
+  created_at: string;
+  updated_at?: string;
+};
+
+export type AiReviewItemAdjustInput = {
+  description: string;
+  trade: string;
+  quantity: number;
+  unit: string;
+  review_notes?: string | null;
+};
