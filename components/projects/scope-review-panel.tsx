@@ -3,6 +3,11 @@
 import { useMemo, useState } from "react";
 
 import { ApplyPackageDialog } from "@/components/takeoff/apply-package-dialog";
+import { TakeoffSourceDialog } from "@/components/takeoff/takeoff-source-dialog";
+import {
+  buildDrawingReferenceContext,
+  formatSourceDocumentFileName,
+} from "@/src/lib/takeoff/drawing-reference";
 import {
   formatMetricPercent,
   WorkflowMetricCards,
@@ -34,6 +39,8 @@ import {
 import type { PricingItemWithTakeoff } from "@/src/lib/pricing/queries";
 import type {
   AssemblyPackage,
+  Document,
+  DocumentPage,
   PricingItem,
   ProjectLabourItem,
   ProjectMaterialItem,
@@ -47,6 +54,8 @@ import type { WorkspaceTabValue } from "@/src/lib/scope-gaps/types";
 
 type ScopeReviewPanelProps = {
   projectId: string;
+  documents: Document[];
+  documentPages: DocumentPage[];
   takeoffItems: TakeoffItem[];
   takeoffAssemblies: TakeoffItemAssemblyWithPackage[];
   pricingItems: PricingItemWithTakeoff[];
@@ -65,6 +74,8 @@ type ScopeReviewPanelProps = {
 
 export function ScopeReviewPanel({
   projectId,
+  documents,
+  documentPages,
   takeoffItems,
   takeoffAssemblies,
   pricingItems,
@@ -83,8 +94,22 @@ export function ScopeReviewPanel({
   const [applyPackageItem, setApplyPackageItem] = useState<TakeoffItem | null>(
     null
   );
+  const [sourceItem, setSourceItem] = useState<TakeoffItem | null>(null);
   const [showBuildUp, setShowBuildUp] = useState<"materials" | "labour" | null>(
     null
+  );
+
+  const drawingContext = useMemo(
+    () => buildDrawingReferenceContext(documents, documentPages),
+    [documents, documentPages]
+  );
+
+  const assemblyByTakeoffId = useMemo(
+    () =>
+      new Map(
+        takeoffAssemblies.map((row) => [row.takeoff_item_id, row] as const)
+      ),
+    [takeoffAssemblies]
   );
 
   const rows = useMemo(
@@ -179,7 +204,11 @@ export function ScopeReviewPanel({
                 <TableHead scope="col">Materials</TableHead>
                 <TableHead scope="col">Labour</TableHead>
                 <TableHead scope="col">Standards</TableHead>
+                <TableHead scope="col">Document</TableHead>
                 <TableHead scope="col">Drawing ref</TableHead>
+                <TableHead scope="col">Sheet</TableHead>
+                <TableHead scope="col">Page</TableHead>
+                <TableHead scope="col">Spec ref</TableHead>
                 <TableHead scope="col">Issues</TableHead>
                 <TableHead scope="col" className="text-right">
                   Actions
@@ -189,7 +218,7 @@ export function ScopeReviewPanel({
             <TableBody>
               {issueRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-muted-foreground">
+                  <TableCell colSpan={14} className="text-muted-foreground">
                     No outstanding issues on priceable takeoff lines.
                   </TableCell>
                 </TableRow>
@@ -224,8 +253,22 @@ export function ScopeReviewPanel({
                       <TableCell>
                         {row.standardsLinked ? "Yes" : "No"}
                       </TableCell>
+                      <TableCell className="max-w-[120px] truncate text-xs">
+                        {takeoff
+                          ? formatSourceDocumentFileName(takeoff, drawingContext)
+                          : "—"}
+                      </TableCell>
                       <TableCell className="font-mono text-xs">
-                        {row.drawingRef ?? "—"}
+                        {takeoff?.drawing_reference?.trim() ?? row.drawingRef ?? "—"}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {takeoff?.sheet_number?.trim() ?? "—"}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs tabular-nums">
+                        {takeoff?.page_number ?? "—"}
+                      </TableCell>
+                      <TableCell className="max-w-[100px] truncate font-mono text-xs">
+                        {takeoff?.specification_reference?.trim() ?? "—"}
                       </TableCell>
                       <TableCell>
                         <ul className="flex flex-col gap-0.5">
@@ -241,6 +284,16 @@ export function ScopeReviewPanel({
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex flex-wrap justify-end gap-1">
+                          {takeoff ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSourceItem(takeoff)}
+                            >
+                              Open source
+                            </Button>
+                          ) : null}
                           {!row.packageName && takeoff ? (
                             <Button
                               type="button"
@@ -314,6 +367,14 @@ export function ScopeReviewPanel({
           type="button"
           variant="outline"
           size="sm"
+          onClick={() => onNavigateTab("tender-inputs")}
+        >
+          Open takeoff workspace
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
           onClick={() => onNavigateTab("commercial-review")}
         >
           Open pricing workspace
@@ -352,6 +413,24 @@ export function ScopeReviewPanel({
           onInitialTakeoffConsumed={onPricingTakeoffConsumed}
         />
       ) : null}
+
+      <TakeoffSourceDialog
+        item={sourceItem}
+        projectId={projectId}
+        documents={documents}
+        documentPages={documentPages}
+        assembly={
+          sourceItem
+            ? (assemblyByTakeoffId.get(sourceItem.id) ?? null)
+            : null
+        }
+        open={Boolean(sourceItem)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSourceItem(null);
+          }
+        }}
+      />
 
       <ApplyPackageDialog
         projectId={projectId}

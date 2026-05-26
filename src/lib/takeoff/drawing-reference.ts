@@ -15,6 +15,19 @@ export function buildDrawingReferenceContext(
   };
 }
 
+export function formatSourceDocumentFileName(
+  item: Pick<TakeoffItem, "source_document_id">,
+  context: DrawingReferenceContext
+): string {
+  if (!item.source_document_id) {
+    return "—";
+  }
+
+  return (
+    context.documentNames.get(item.source_document_id) ?? "Unknown document"
+  );
+}
+
 /** Primary line for table display (structured refs preferred over free text alone). */
 export function formatDrawingReferencePrimary(
   item: Pick<

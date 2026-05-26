@@ -18,6 +18,7 @@ import type { PricingItemWithTakeoff } from "@/src/lib/pricing/queries";
 import type { ScopeGapSummary, WorkspaceTabValue } from "@/src/lib/scope-gaps/types";
 import type {
   AssemblyPackage,
+  ClarificationTemplate,
   Document,
   DocumentPage,
   PricingItem,
@@ -29,6 +30,7 @@ import type {
   StandardLinkWithStandard,
   TakeoffItem,
   TakeoffItemAssemblyWithPackage,
+  TenderClarification,
 } from "@/src/types/database";
 
 const workspaceTabs = [
@@ -55,6 +57,8 @@ type ProjectWorkspaceTabsProps = {
   organisationStandards: Standard[];
   projectStandardLinks: StandardLinkWithStandard[];
   standardLinks: StandardLink[];
+  clarifications: TenderClarification[];
+  clarificationTemplates: ClarificationTemplate[];
 };
 
 export function ProjectWorkspaceTabs({
@@ -73,6 +77,8 @@ export function ProjectWorkspaceTabs({
   organisationStandards,
   projectStandardLinks,
   standardLinks,
+  clarifications,
+  clarificationTemplates,
 }: ProjectWorkspaceTabsProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -94,6 +100,7 @@ export function ProjectWorkspaceTabs({
         materialItems,
         labourItems,
         standardLinks,
+        clarifications,
         scopeGapsTotal: scopeGapSummary.totalGaps,
       }),
     [
@@ -104,6 +111,7 @@ export function ProjectWorkspaceTabs({
       materialItems,
       labourItems,
       standardLinks,
+      clarifications,
       scopeGapSummary.totalGaps,
     ]
   );
@@ -221,6 +229,8 @@ export function ProjectWorkspaceTabs({
       <TabsContent value="scope-review">
         <ScopeReviewPanel
           projectId={project.id}
+          documents={documents}
+          documentPages={documentPages}
           takeoffItems={takeoffItems}
           takeoffAssemblies={takeoffAssemblies}
           pricingItems={pricingItems}
@@ -268,8 +278,17 @@ export function ProjectWorkspaceTabs({
 
       <TabsContent value="submission">
         <SubmissionPanel
-          readiness={readiness}
-          scopeGapSummary={scopeGapSummary}
+          project={project}
+          projectId={project.id}
+          documents={documents}
+          takeoffItems={takeoffItems}
+          pricingItems={pricingItems}
+          takeoffAssemblies={takeoffAssemblies}
+          materialItems={materialItems}
+          labourItems={labourItems}
+          standardLinks={standardLinks}
+          clarifications={clarifications}
+          templates={clarificationTemplates}
         />
       </TabsContent>
     </Tabs>

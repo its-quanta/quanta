@@ -22,6 +22,7 @@ import { AddTakeoffItemDialog } from "@/components/takeoff/add-takeoff-item-dial
 import { LinkStandardsDialog } from "@/components/standards/link-standards-dialog";
 import { ApplyPackageDialog } from "@/components/takeoff/apply-package-dialog";
 import { EditTakeoffItemDialog } from "@/components/takeoff/edit-takeoff-item-dialog";
+import { TakeoffSourceDialog } from "@/components/takeoff/takeoff-source-dialog";
 import { TakeoffStatusBadge } from "@/components/takeoff/takeoff-status-badge";
 import {
   defaultTakeoffFilters,
@@ -64,8 +65,7 @@ import {
 import { formatPricingSourceLabel } from "@/src/lib/pricing/pricing-source";
 import {
   buildDrawingReferenceContext,
-  formatDrawingReferencePrimary,
-  formatDrawingReferenceSecondary,
+  formatSourceDocumentFileName,
 } from "@/src/lib/takeoff/drawing-reference";
 import type {
   AssemblyPackage,
@@ -130,6 +130,7 @@ export function TakeoffTable({
   const [linkStandardsItem, setLinkStandardsItem] = useState<TakeoffItem | null>(
     null
   );
+  const [sourceItem, setSourceItem] = useState<TakeoffItem | null>(null);
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -273,17 +274,16 @@ export function TakeoffTable({
               !row.original.source_document_id && "text-muted-foreground"
             )}
           >
-            {formatDrawingReferenceSecondary(row.original, drawingContext) ??
-              "No document linked"}
+            {formatSourceDocumentFileName(row.original, drawingContext)}
           </span>
         ),
       },
       {
         id: "drawing_reference",
-        header: "Drawing Ref",
+        header: "Drawing ref",
         cell: ({ row }) => (
-          <span className="max-w-[160px] font-mono text-sm tabular-nums">
-            {formatDrawingReferencePrimary(row.original, drawingContext)}
+          <span className="max-w-[140px] truncate font-mono text-sm tabular-nums">
+            {row.original.drawing_reference?.trim() || "—"}
           </span>
         ),
       },
@@ -302,6 +302,15 @@ export function TakeoffTable({
         cell: ({ row }) => (
           <span className="block text-right font-mono text-sm tabular-nums">
             {row.original.page_number ?? "—"}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "specification_reference",
+        header: "Spec ref",
+        cell: ({ row }) => (
+          <span className="max-w-[120px] truncate font-mono text-sm tabular-nums">
+            {row.original.specification_reference?.trim() || "—"}
           </span>
         ),
       },
@@ -332,7 +341,7 @@ export function TakeoffTable({
       },
       {
         id: "pricing_source",
-        header: "Source",
+        header: "Pricing",
         cell: ({ row }) => {
           const pricing = pricingByTakeoffId.get(row.original.id);
           const applied = takeoffAssembliesByItemId.get(row.original.id);
@@ -371,6 +380,21 @@ export function TakeoffTable({
           <span className="max-w-[140px] truncate text-sm text-muted-foreground">
             {row.original.notes ?? "—"}
           </span>
+        ),
+      },
+      {
+        id: "open_source",
+        header: () => <span className="sr-only">Source</span>,
+        cell: ({ row }) => (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="whitespace-nowrap"
+            onClick={() => setSourceItem(row.original)}
+          >
+            Open source
+          </Button>
         ),
       },
       {
@@ -675,6 +699,24 @@ export function TakeoffTable({
           }
         }}
         onSuccess={setSuccessMessage}
+      />
+
+      <TakeoffSourceDialog
+        item={sourceItem}
+        projectId={projectId}
+        documents={documents}
+        documentPages={documentPages}
+        assembly={
+          sourceItem
+            ? (takeoffAssembliesByItemId.get(sourceItem.id) ?? null)
+            : null
+        }
+        open={Boolean(sourceItem)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSourceItem(null);
+          }
+        }}
       />
 
       <Dialog

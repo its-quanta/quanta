@@ -584,3 +584,62 @@ export type StandardLink = {
 export type StandardLinkWithStandard = StandardLink & {
   standard: Standard;
 };
+
+export type ClarificationType =
+  | "exclusion"
+  | "assumption"
+  | "rfi"
+  | "clarification"
+  | "risk"
+  | "note";
+
+export type ClarificationTemplateType = "exclusion" | "assumption";
+
+export type ClarificationStatus = "draft" | "open" | "answered" | "closed";
+
+export type RfiPriority = "low" | "medium" | "high";
+
+export type ClarificationTemplate = {
+  id: string;
+  organisation_id: string;
+  type: ClarificationTemplateType;
+  title: string;
+  description: string | null;
+  category: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at?: string;
+};
+
+export type TenderClarification = {
+  id: string;
+  organisation_id: string;
+  project_id: string;
+  type: ClarificationType;
+  title: string;
+  description: string | null;
+  category: string | null;
+  status: ClarificationStatus;
+  priority: RfiPriority | null;
+  related_drawing: string | null;
+  related_takeoff_item_id: string | null;
+  ai_generated: boolean;
+  reviewed: boolean;
+  created_at: string;
+  updated_at?: string;
+};
+
+export type TenderClarificationInput = {
+  type: ClarificationType;
+  title: string;
+  description?: string | null;
+  category?: string | null;
+  status?: ClarificationStatus;
+  priority?: RfiPriority | null;
+  related_drawing?: string | null;
+  related_takeoff_item_id?: string | null;
+  reviewed?: boolean;
+};
+
+export type TenderClarificationUpdate = Partial<TenderClarificationInput>;

@@ -6,6 +6,7 @@ import type {
   StandardLink,
   TakeoffItem,
   TakeoffItemAssemblyWithPackage,
+  TenderClarification,
 } from "@/src/types/database";
 
 export type ProjectReadinessMetrics = {
@@ -40,6 +41,7 @@ export function computeProjectReadiness(input: {
   materialItems: ProjectMaterialItem[];
   labourItems: ProjectLabourItem[];
   standardLinks: StandardLink[];
+  clarifications?: TenderClarification[];
   scopeGapsTotal: number;
 }): ProjectReadinessMetrics {
   const {
@@ -50,6 +52,7 @@ export function computeProjectReadiness(input: {
     materialItems,
     labourItems,
     standardLinks,
+    clarifications = [],
     scopeGapsTotal,
   } = input;
 
@@ -114,10 +117,21 @@ export function computeProjectReadiness(input: {
   const labourGenerationPercent = percent(labourGenerated, withPackage.length);
   const standardsCoveragePercent = percent(standardsLinked, priceableCount);
 
+  const exclusionCount = clarifications.filter(
+    (row) => row.type === "exclusion"
+  ).length;
+  const assumptionCount = clarifications.filter(
+    (row) => row.type === "assumption"
+  ).length;
+  const clarificationsComplete = exclusionCount > 0 && assumptionCount > 0;
+  const exclusionsDraftedPercent =
+    exclusionCount > 0 ? 100 : exclusionCount === 0 ? 0 : null;
+
   const readyForSubmission =
     priceableCount > 0 &&
     scopeGapsTotal === 0 &&
-    pricedItems === priceableCount;
+    pricedItems === priceableCount &&
+    clarificationsComplete;
 
   return {
     documentsUploaded: documents.length,
@@ -129,7 +143,7 @@ export function computeProjectReadiness(input: {
     materialGenerationPercent,
     labourGenerationPercent,
     standardsCoveragePercent,
-    exclusionsDraftedPercent: null,
+    exclusionsDraftedPercent,
     readyForSubmission,
     unpricedItems: Math.max(0, priceableCount - pricedItems),
     pricedItems,

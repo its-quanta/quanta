@@ -19,6 +19,10 @@ import {
   getStandardsForOrganisation,
 } from "@/src/lib/standards/queries";
 import { getTakeoffItemAssembliesForProject } from "@/src/lib/takeoff-assembly/queries";
+import {
+  getClarificationTemplatesForOrganisation,
+  getClarificationsForProject,
+} from "@/src/lib/clarifications/queries";
 import { getTakeoffItemsForProject } from "@/src/lib/takeoff/queries";
 import { requireOrganisationProfile } from "@/src/lib/auth/require-profile";
 import { getProjectById } from "@/src/lib/projects/queries";
@@ -53,6 +57,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     organisationStandards,
     projectStandardLinks,
     standardLinks,
+    clarifications,
+    clarificationTemplates,
   ] = await Promise.all([
     getDocumentsForProject(project.id, profile.organisation_id),
     getDocumentPagesForProject(project.id, profile.organisation_id),
@@ -73,6 +79,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       profile.organisation_id
     ),
     getStandardLinksForProject(project.id, profile.organisation_id),
+    getClarificationsForProject(project.id, profile.organisation_id),
+    getClarificationTemplatesForOrganisation(profile.organisation_id),
   ]);
 
   const { materialItems, labourItems, loadError: estimateLoadError } =
@@ -138,6 +146,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
               organisationStandards={organisationStandards}
               projectStandardLinks={projectStandardLinks}
               standardLinks={standardLinks}
+              clarifications={clarifications}
+              clarificationTemplates={clarificationTemplates}
             />
           </Suspense>
         </div>

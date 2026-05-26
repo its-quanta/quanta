@@ -1,213 +1,254 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { SCOPE_GAP_LABELS } from "@/src/lib/scope-gaps/constants";
-import type { ProjectReadinessMetrics } from "@/src/lib/projects/readiness";
-import type { ScopeGapSummary } from "@/src/lib/scope-gaps/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+
+import { AssumptionsPanel } from "@/components/submission/assumptions-panel";
+import { ExclusionsPanel } from "@/components/submission/exclusions-panel";
+import { RfisPanel } from "@/components/submission/rfis-panel";
+import { SubmissionBlockersColumns } from "@/components/submission/submission-blockers-columns";
+import { TenderPackPreviewModal } from "@/components/submission/tender-pack-preview-modal";
+import { SubmissionReadinessSummary } from "@/components/submission/submission-readiness-summary";
+import { SubmissionStickyStatus } from "@/components/submission/submission-sticky-status";
+import { SubmissionTenderPackPanel } from "@/components/submission/submission-tender-pack-panel";
+import { SubmissionValidationAccordion } from "@/components/submission/submission-validation-accordion";
+import { useOrganisationSettings } from "@/components/layout/organisation-settings-provider";
+import { buildSubmissionPreview } from "@/src/lib/submission/preview";
+import { buildTenderPackPreview } from "@/src/lib/submission/tender-pack-preview";
+import { validateTender } from "@/src/lib/submission/validate-tender";
+import type { PricingItemWithTakeoff } from "@/src/lib/pricing/queries";
+import type {
+  ClarificationTemplate,
+  Document,
+  Project,
+  ProjectLabourItem,
+  ProjectMaterialItem,
+  StandardLink,
+  TakeoffItem,
+  TakeoffItemAssemblyWithPackage,
+  TenderClarification,
+} from "@/src/types/database";
 
 type SubmissionPanelProps = {
-  readiness: ProjectReadinessMetrics;
-  scopeGapSummary: ScopeGapSummary;
+  project: Project;
+  projectId: string;
+  documents: Document[];
+  takeoffItems: TakeoffItem[];
+  pricingItems: PricingItemWithTakeoff[];
+  takeoffAssemblies: TakeoffItemAssemblyWithPackage[];
+  materialItems: ProjectMaterialItem[];
+  labourItems: ProjectLabourItem[];
+  standardLinks: StandardLink[];
+  clarifications: TenderClarification[];
+  templates: ClarificationTemplate[];
 };
-
-type ReadinessCheck = {
-  label: string;
-  passed: boolean;
-  detail: string;
-};
-
-function ReadinessCheckRow({ check }: { check: ReadinessCheck }) {
-  return (
-    <li className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2">
-      <div>
-        <p className="text-sm font-medium">{check.label}</p>
-        <p className="text-xs text-muted-foreground">{check.detail}</p>
-      </div>
-      <Badge
-        variant="outline"
-        className={
-          check.passed
-            ? "border-emerald-500/50 text-emerald-800"
-            : "border-amber-500/50 text-amber-900"
-        }
-      >
-        {check.passed ? "Pass" : "Outstanding"}
-      </Badge>
-    </li>
-  );
-}
 
 export function SubmissionPanel({
-  readiness,
-  scopeGapSummary,
+  project,
+  projectId,
+  documents,
+  takeoffItems,
+  pricingItems,
+  takeoffAssemblies,
+  materialItems,
+  labourItems,
+  standardLinks,
+  clarifications,
+  templates,
 }: SubmissionPanelProps) {
-  const byKind = scopeGapSummary.byKind;
+  const { settings, currency } = useOrganisationSettings();
+  const searchParams = useSearchParams();
+  const sectionParam = searchParams.get("section");
+  const issuesRef = useRef<HTMLDivElement>(null);
+  const exclusionsRef = useRef<HTMLDivElement>(null);
+  const assumptionsRef = useRef<HTMLDivElement>(null);
+  const rfisRef = useRef<HTMLDivElement>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewGeneratedAt, setPreviewGeneratedAt] = useState<string | null>(
+    null
+  );
 
-  const checks: ReadinessCheck[] = [
-    {
-      label: "Pricing complete",
-      passed:
-        readiness.pricingCoveragePercent === 100 &&
-        readiness.priceableTakeoffItems > 0,
-      detail: `${readiness.pricedItems} of ${readiness.priceableTakeoffItems} lines priced`,
-    },
-    {
-      label: "No missing package",
-      passed: byKind.missing_package === 0,
-      detail:
-        byKind.missing_package === 0
-          ? "All priceable lines have methodology applied"
-          : `${byKind.missing_package} lines without package`,
-    },
-    {
-      label: "No missing pricing",
-      passed: byKind.missing_pricing === 0,
-      detail:
-        byKind.missing_pricing === 0
-          ? "Every line has a pricing record"
-          : `${byKind.missing_pricing} unpriced lines`,
-    },
-    {
-      label: "No missing labour",
-      passed: byKind.missing_labour_generation === 0,
-      detail:
-        byKind.missing_labour_generation === 0
-          ? "Labour generated where packages apply"
-          : `${byKind.missing_labour_generation} lines need labour`,
-    },
-    {
-      label: "No missing materials",
-      passed: byKind.missing_material_generation === 0,
-      detail:
-        byKind.missing_material_generation === 0
-          ? "Materials generated where packages apply"
-          : `${byKind.missing_material_generation} lines need materials`,
-    },
-    {
-      label: "Standards linked",
-      passed: byKind.missing_standards_reference === 0,
-      detail:
-        byKind.missing_standards_reference === 0
-          ? "Standards referenced on takeoff lines"
-          : `${byKind.missing_standards_reference} lines without standards`,
-    },
-    {
-      label: "Exclusions complete",
-      passed: false,
-      detail:
-        "Clarifications (exclusions, assumptions, RFIs) connect in a later phase.",
-    },
-  ];
+  const priceableTakeoff = useMemo(
+    () => takeoffItems.filter((item) => item.status !== "excluded"),
+    [takeoffItems]
+  );
 
-  const readyToSubmit =
-    readiness.readyForSubmission &&
-    checks.filter((c) => c.label !== "Exclusions complete").every((c) => c.passed);
+  const validation = useMemo(
+    () =>
+      validateTender({
+        documents,
+        takeoffItems,
+        pricingItems,
+        takeoffAssemblies,
+        materialItems,
+        labourItems,
+        standardLinks,
+        clarifications,
+        organisationSettings: settings,
+      }),
+    [
+      documents,
+      takeoffItems,
+      pricingItems,
+      takeoffAssemblies,
+      materialItems,
+      labourItems,
+      standardLinks,
+      clarifications,
+      settings,
+    ]
+  );
+
+  const packContents = useMemo(
+    () =>
+      buildSubmissionPreview({
+        documents,
+        takeoffItems,
+        pricingItems,
+        materialItems,
+        labourItems,
+        clarifications,
+      }),
+    [documents, takeoffItems, pricingItems, materialItems, labourItems, clarifications]
+  );
+
+  const tenderPackPreview = useMemo(
+    () =>
+      buildTenderPackPreview({
+        project,
+        organisationSettings: settings,
+        documents,
+        takeoffItems,
+        pricingItems,
+        takeoffAssemblies,
+        materialItems,
+        labourItems,
+        clarifications,
+        validation,
+        packContents,
+        generatedAt: previewGeneratedAt ?? new Date().toISOString(),
+      }),
+    [
+      project,
+      settings,
+      documents,
+      takeoffItems,
+      pricingItems,
+      takeoffAssemblies,
+      materialItems,
+      labourItems,
+      clarifications,
+      validation,
+      packContents,
+      previewGeneratedAt,
+    ]
+  );
+
+  function openTenderPackPreview() {
+    setPreviewGeneratedAt(new Date().toISOString());
+    setPreviewOpen(true);
+  }
+
+  const critical = useMemo(
+    () => validation.issues.filter((i) => i.severity === "critical"),
+    [validation.issues]
+  );
+  const warnings = useMemo(
+    () => validation.issues.filter((i) => i.severity === "warning"),
+    [validation.issues]
+  );
+
+  const exclusions = clarifications.filter((row) => row.type === "exclusion");
+  const assumptions = clarifications.filter((row) => row.type === "assumption");
+  const rfis = clarifications.filter((row) => row.type === "rfi");
+
+  function scrollToRef(ref: React.RefObject<HTMLElement | null>) {
+    ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  useEffect(() => {
+    const target =
+      sectionParam === "exclusions"
+        ? exclusionsRef
+        : sectionParam === "assumptions"
+          ? assumptionsRef
+          : sectionParam === "rfis"
+            ? rfisRef
+            : null;
+    if (target?.current) {
+      target.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [sectionParam]);
 
   return (
-    <div className="flex flex-col gap-8">
-      <Card
-        className={
-          readyToSubmit ? "border-emerald-500/40" : "border-amber-500/40"
-        }
-      >
-        <CardHeader>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="text-base">Tender readiness</CardTitle>
-              <CardDescription>
-                Final checks before export and submission.
-              </CardDescription>
-            </div>
-            <Badge
-              variant="outline"
-              className={
-                readyToSubmit
-                  ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-800"
-                  : "border-amber-500/50 bg-amber-500/10 text-amber-900"
-              }
-            >
-              Ready to submit: {readyToSubmit ? "Yes" : "No"}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <ul className="flex flex-col gap-2">
-            {checks.map((check) => (
-              <ReadinessCheckRow key={check.label} check={check} />
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
+    <div className="flex flex-col gap-5">
+      <SubmissionReadinessSummary
+        project={project}
+        validation={validation}
+        onFixIssues={() => scrollToRef(issuesRef)}
+        onPreviewPack={openTenderPackPreview}
+      />
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Exclusions</CardTitle>
-            <CardDescription>
-              Qualifications to exclude from your tender scope.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Record exclusions when clarifications are enabled. Review scope
-              gaps: {SCOPE_GAP_LABELS.missing_package.toLowerCase()} and pricing
-              should be resolved first.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Assumptions</CardTitle>
-            <CardDescription>
-              Conditions assumed in your pricing.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Assumptions will appear here alongside exclusions and RFIs.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">RFIs</CardTitle>
-            <CardDescription>
-              Requests for information to the principal.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Track open RFIs before submission when clarifications are enabled.
-            </p>
-          </CardContent>
-        </Card>
+      <div ref={issuesRef}>
+        <SubmissionBlockersColumns
+          projectId={projectId}
+          critical={critical}
+          warnings={warnings}
+        />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Export</CardTitle>
-          <CardDescription>
-            Export reflects saved data as of now. Excel export connects in a
-            later phase.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Complete pricing and scope review before exporting your tender pack.
-            No export changes in this release — controls remain placeholder until
-            M6 export is wired.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="grid gap-5 xl:grid-cols-12 xl:items-start">
+        <div className="flex flex-col gap-5 xl:col-span-7">
+          <div ref={exclusionsRef}>
+            <ExclusionsPanel
+              projectId={projectId}
+              items={exclusions}
+              templates={templates}
+            />
+          </div>
+
+          <div ref={assumptionsRef}>
+            <AssumptionsPanel
+              projectId={projectId}
+              items={assumptions}
+              templates={templates}
+            />
+          </div>
+
+          <div ref={rfisRef}>
+            <RfisPanel
+              projectId={projectId}
+              items={rfis}
+              takeoffItems={priceableTakeoff}
+            />
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-medium text-foreground">
+              Validation details
+            </p>
+            <SubmissionValidationAccordion validation={validation} />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-5 xl:col-span-5">
+          <SubmissionTenderPackPanel
+            preview={packContents}
+            onPreviewPack={openTenderPackPreview}
+          />
+          <SubmissionStickyStatus
+            validation={validation}
+            onPreviewPack={openTenderPackPreview}
+          />
+        </div>
+      </div>
+
+      <TenderPackPreviewModal
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        data={tenderPackPreview}
+        currency={currency}
+      />
     </div>
   );
 }

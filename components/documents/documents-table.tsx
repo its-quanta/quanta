@@ -9,6 +9,7 @@ import {
   ViewIcon,
 } from "@hugeicons/core-free-icons";
 
+import { DocumentPreviewDialog } from "@/components/documents/document-preview-dialog";
 import { DocumentProcessingBadge } from "@/components/documents/document-processing-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,22 +51,27 @@ export function DocumentsTable({ documents, projectId }: DocumentsTableProps) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingDocumentId, setPendingDocumentId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
+  const [previewDocument, setPreviewDocument] = useState<Document | null>(null);
 
-  function openDocument(documentId: string) {
+  function downloadDocument(document: Document) {
     setActionError(null);
-    setPendingDocumentId(documentId);
+    setPendingDocumentId(document.id);
 
     startTransition(async () => {
-      const result = await getDocumentSignedUrlAction(documentId, projectId);
+      const result = await getDocumentSignedUrlAction(document.id, projectId);
 
       setPendingDocumentId(null);
 
       if (result.error || !result.signedUrl) {
-        setActionError(result.error ?? "Could not open document.");
+        setActionError(result.error ?? "Could not download document.");
         return;
       }
 
-      window.open(result.signedUrl, "_blank", "noopener,noreferrer");
+      const anchor = window.document.createElement("a");
+      anchor.href = result.signedUrl;
+      anchor.download = document.file_name;
+      anchor.rel = "noopener noreferrer";
+      anchor.click();
     });
   }
 
@@ -123,6 +129,7 @@ export function DocumentsTable({ documents, projectId }: DocumentsTableProps) {
           <TableBody>
             {documents.map((document) => {
               const isRowPending = pendingDocumentId === document.id && isPending;
+              const isReady = document.processing_status === "ready";
 
               return (
                 <TableRow key={document.id} className="hover:bg-muted/20">
@@ -150,28 +157,22 @@ export function DocumentsTable({ documents, projectId }: DocumentsTableProps) {
                       <Button
                         type="button"
                         variant="ghost"
-                        size="icon-sm"
-                        disabled={
-                          isRowPending ||
-                          document.processing_status !== "ready"
-                        }
-                        onClick={() => openDocument(document.id)}
-                        aria-label={`View ${document.file_name}`}
+                        size="sm"
+                        disabled={isRowPending || !isReady}
+                        onClick={() => setPreviewDocument(document)}
                       >
                         <HugeiconsIcon icon={ViewIcon} strokeWidth={2} />
+                        View
                       </Button>
                       <Button
                         type="button"
                         variant="ghost"
-                        size="icon-sm"
-                        disabled={
-                          isRowPending ||
-                          document.processing_status !== "ready"
-                        }
-                        onClick={() => openDocument(document.id)}
-                        aria-label={`Download ${document.file_name}`}
+                        size="sm"
+                        disabled={isRowPending || !isReady}
+                        onClick={() => downloadDocument(document)}
                       >
                         <HugeiconsIcon icon={Download04Icon} strokeWidth={2} />
+                        Download
                       </Button>
                       <Button
                         type="button"
@@ -201,6 +202,17 @@ export function DocumentsTable({ documents, projectId }: DocumentsTableProps) {
           {actionError}
         </p>
       ) : null}
+
+      <DocumentPreviewDialog
+        document={previewDocument}
+        projectId={projectId}
+        open={Boolean(previewDocument)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPreviewDocument(null);
+          }
+        }}
+      />
 
       <Dialog
         open={Boolean(deleteTarget)}
