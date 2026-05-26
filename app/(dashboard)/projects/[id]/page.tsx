@@ -6,12 +6,15 @@ import { ProjectStatusBadge } from "@/components/projects/project-status-badge";
 import { ProjectWorkspaceTabs } from "@/components/projects/project-workspace-tabs";
 import { formatCurrency, formatDate } from "@/src/lib/format";
 import { getDocumentPagesForProject } from "@/src/lib/documents/document-page-queries";
+import { getOrganisationById } from "@/src/lib/organisations/queries";
+import { resolveOrganisationCurrency } from "@/src/lib/organisations/settings";
 import { getDocumentsForProject } from "@/src/lib/documents/queries";
 import { getActiveAssemblyPackagesForOrganisation } from "@/src/lib/assemblies/queries";
 import { getPricingItemsForProject } from "@/src/lib/pricing/queries";
 import { getProjectEstimateItems } from "@/src/lib/estimate-generation/queries";
 import { getProjectScopeGapSummary } from "@/src/lib/scope-gaps/queries";
 import {
+  getStandardLinksForProject,
   getStandardLinksWithStandardsForProject,
   getStandardsForOrganisation,
 } from "@/src/lib/standards/queries";
@@ -27,11 +30,16 @@ type ProjectPageProps = {
 export default async function ProjectPage({ params }: ProjectPageProps) {
   const { id } = await params;
   const { profile } = await requireOrganisationProfile();
-  const project = await getProjectById(id);
+  const [project, organisation] = await Promise.all([
+    getProjectById(id),
+    getOrganisationById(profile.organisation_id),
+  ]);
 
   if (!project || project.organisation_id !== profile.organisation_id) {
     notFound();
   }
+
+  const currency = resolveOrganisationCurrency(organisation);
 
   const [
     documents,
@@ -44,6 +52,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     scopeGapSummary,
     organisationStandards,
     projectStandardLinks,
+    standardLinks,
   ] = await Promise.all([
     getDocumentsForProject(project.id, profile.organisation_id),
     getDocumentPagesForProject(project.id, profile.organisation_id),
@@ -63,6 +72,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       project.id,
       profile.organisation_id
     ),
+    getStandardLinksForProject(project.id, profile.organisation_id),
   ]);
 
   const { materialItems, labourItems, loadError: estimateLoadError } =
@@ -102,7 +112,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             <div className="flex flex-col items-start gap-2 sm:items-end">
               <ProjectStatusBadge status={project.status} />
               <p className="font-mono text-sm tabular-nums text-muted-foreground">
-                Est. {formatCurrency(project.estimated_value)}
+                Est. {formatCurrency(project.estimated_value, currency)}
               </p>
             </div>
           </header>
@@ -127,6 +137,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
               scopeGapSummary={scopeGapSummary}
               organisationStandards={organisationStandards}
               projectStandardLinks={projectStandardLinks}
+              standardLinks={standardLinks}
             />
           </Suspense>
         </div>

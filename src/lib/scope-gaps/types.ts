@@ -8,13 +8,10 @@ export type ScopeGapKind =
 
 export type WorkspaceTabValue =
   | "overview"
-  | "documents"
-  | "takeoff"
-  | "materials"
-  | "labour"
-  | "pricing"
-  | "clarifications"
-  | "export";
+  | "tender-inputs"
+  | "scope-review"
+  | "commercial-review"
+  | "submission";
 
 export type ScopeGap = {
   id: string;

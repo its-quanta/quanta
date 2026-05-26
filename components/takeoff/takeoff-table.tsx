@@ -99,6 +99,7 @@ type TakeoffTableProps = {
   organisationStandards: Standard[];
   projectStandardLinks: StandardLinkWithStandard[];
   onPriceManual?: (takeoffItemId: string) => void;
+  showWorkflowFilter?: boolean;
 };
 
 export function TakeoffTable({
@@ -112,6 +113,7 @@ export function TakeoffTable({
   organisationStandards,
   projectStandardLinks,
   onPriceManual,
+  showWorkflowFilter = false,
 }: TakeoffTableProps) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
@@ -160,9 +162,18 @@ export function TakeoffTable({
     [items]
   );
 
+  const workflowContext = useMemo(
+    () => ({
+      takeoffAssemblies,
+      pricingItems,
+      standardLinks: projectStandardLinks,
+    }),
+    [takeoffAssemblies, pricingItems, projectStandardLinks]
+  );
+
   const filteredItems = useMemo(
-    () => filterTakeoffItems(items, filters),
-    [items, filters]
+    () => filterTakeoffItems(items, filters, workflowContext),
+    [items, filters, workflowContext]
   );
 
   function runRowAction(
@@ -515,6 +526,7 @@ export function TakeoffTable({
           onChange={setFilters}
           documents={documents}
           tradesInUse={tradesInUse}
+          showWorkflowFilter={showWorkflowFilter}
         />
       ) : null}
 

@@ -102,7 +102,7 @@ export function ProjectScopeGapsCard({
                           onNavigateTab(gap.fix_tab!, gap.takeoff_item_id)
                         }
                       >
-                        Open {gap.fix_tab}
+                        Resolve
                       </Button>
                     ) : null}
                   </div>

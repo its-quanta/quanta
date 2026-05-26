@@ -29,6 +29,8 @@ type ProjectTakeoffPanelProps = {
   organisationStandards: Standard[];
   projectStandardLinks: StandardLinkWithStandard[];
   onPriceManual?: (takeoffItemId: string) => void;
+  showWorkflowFilter?: boolean;
+  compact?: boolean;
 };
 
 export function ProjectTakeoffPanel({
@@ -42,10 +44,12 @@ export function ProjectTakeoffPanel({
   organisationStandards,
   projectStandardLinks,
   onPriceManual,
+  showWorkflowFilter = false,
+  compact = false,
 }: ProjectTakeoffPanelProps) {
   return (
     <div className="flex flex-col gap-6">
-      <TakeoffSummary items={items} />
+      {!compact ? <TakeoffSummary items={items} /> : null}
 
       <Card>
         <CardHeader>
@@ -67,6 +71,7 @@ export function ProjectTakeoffPanel({
             organisationStandards={organisationStandards}
             projectStandardLinks={projectStandardLinks}
             onPriceManual={onPriceManual}
+            showWorkflowFilter={showWorkflowFilter}
           />
         </CardContent>
       </Card>

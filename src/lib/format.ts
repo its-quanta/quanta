@@ -1,15 +1,44 @@
-const GBP_FORMATTER = new Intl.NumberFormat("en-GB", {
-  style: "currency",
-  currency: "GBP",
-  maximumFractionDigits: 0,
-});
+import type { OrganisationCurrency } from "@/src/types/database";
 
-export function formatCurrency(value: number | null | undefined): string {
+import { DEFAULT_ORGANISATION_CURRENCY } from "@/src/lib/organisations/constants";
+
+const LOCALE_BY_CURRENCY: Record<OrganisationCurrency, string> = {
+  NZD: "en-NZ",
+  AUD: "en-AU",
+  GBP: "en-GB",
+  USD: "en-US",
+  EUR: "en-GB",
+};
+
+const formatterCache = new Map<OrganisationCurrency, Intl.NumberFormat>();
+
+function getCurrencyFormatter(
+  currency: OrganisationCurrency
+): Intl.NumberFormat {
+  const cached = formatterCache.get(currency);
+  if (cached) {
+    return cached;
+  }
+
+  const formatter = new Intl.NumberFormat(LOCALE_BY_CURRENCY[currency], {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  });
+  formatterCache.set(currency, formatter);
+  return formatter;
+}
+
+export function formatCurrency(
+  value: number | null | undefined,
+  currency: OrganisationCurrency | null | undefined = DEFAULT_ORGANISATION_CURRENCY
+): string {
   if (value === null || value === undefined) {
     return "—";
   }
 
-  return GBP_FORMATTER.format(value);
+  const code = currency ?? DEFAULT_ORGANISATION_CURRENCY;
+  return getCurrencyFormatter(code).format(value);
 }
 
 export function formatDate(value: string | null | undefined): string {

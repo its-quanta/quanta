@@ -22,9 +22,26 @@ export type OrganisationProfile = Profile & {
   role: ProfileRole;
 };
 
+export type OrganisationCurrency = "NZD" | "AUD" | "GBP" | "USD" | "EUR";
+
+export type OrganisationCountry =
+  | "new_zealand"
+  | "australia"
+  | "united_kingdom"
+  | "united_states"
+  | "europe"
+  | "other";
+
 export type Organisation = {
   id: string;
   name: string;
+  country: OrganisationCountry | null;
+  currency: OrganisationCurrency | null;
+  tax_rate: number | null;
+  default_margin_percentage: number | null;
+  default_markup_percentage: number | null;
+  default_labour_cost_rate: number | null;
+  default_labour_charge_rate: number | null;
   created_at?: string;
   updated_at?: string;
 };

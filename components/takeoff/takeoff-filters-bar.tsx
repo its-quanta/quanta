@@ -8,7 +8,21 @@ import {
   TAKEOFF_TRADES,
 } from "@/src/lib/takeoff/constants";
 import { drawingReferenceSearchText } from "@/src/lib/takeoff/drawing-reference";
-import type { Document, TakeoffItem } from "@/src/types/database";
+import type {
+  Document,
+  PricingItem,
+  StandardLink,
+  TakeoffItem,
+  TakeoffItemAssembly,
+} from "@/src/types/database";
+
+export type WorkflowTakeoffFilter =
+  | "all"
+  | "no_package"
+  | "no_pricing"
+  | "no_drawing_reference"
+  | "no_standards_linked"
+  | "outstanding_review";
 
 export type TakeoffFilters = {
   search: string;
@@ -16,6 +30,7 @@ export type TakeoffFilters = {
   status: string;
   reviewed: string;
   documentId: string;
+  workflow: WorkflowTakeoffFilter;
 };
 
 export const defaultTakeoffFilters: TakeoffFilters = {
@@ -24,6 +39,7 @@ export const defaultTakeoffFilters: TakeoffFilters = {
   status: "all",
   reviewed: "all",
   documentId: "all",
+  workflow: "all",
 };
 
 type TakeoffFiltersBarProps = {
@@ -31,6 +47,7 @@ type TakeoffFiltersBarProps = {
   onChange: (filters: TakeoffFilters) => void;
   documents: Document[];
   tradesInUse: string[];
+  showWorkflowFilter?: boolean;
 };
 
 export function TakeoffFiltersBar({
@@ -38,6 +55,7 @@ export function TakeoffFiltersBar({
   onChange,
   documents,
   tradesInUse,
+  showWorkflowFilter = false,
 }: TakeoffFiltersBarProps) {
   const tradeOptions = Array.from(
     new Set([...TAKEOFF_TRADES, ...tradesInUse].sort())
@@ -137,17 +155,105 @@ export function TakeoffFiltersBar({
           </select>
         </div>
       ) : null}
+
+      {showWorkflowFilter ? (
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <Label htmlFor="takeoff-filter-workflow" className="text-xs">
+            Workflow filter
+          </Label>
+          <select
+            id="takeoff-filter-workflow"
+            className={selectClassName}
+            value={filters.workflow}
+            onChange={(event) =>
+              update("workflow", event.target.value as WorkflowTakeoffFilter)
+            }
+          >
+            <option value="all">All lines</option>
+            <option value="no_package">No package</option>
+            <option value="no_pricing">No pricing</option>
+            <option value="no_drawing_reference">No drawing reference</option>
+            <option value="no_standards_linked">No standards linked</option>
+            <option value="outstanding_review">Outstanding review</option>
+          </select>
+        </div>
+      ) : null}
     </div>
   );
 }
 
+function hasDrawingReference(item: TakeoffItem): boolean {
+  if (item.drawing_reference?.trim()) {
+    return true;
+  }
+  if (item.document_page_id) {
+    return true;
+  }
+  if (item.sheet_number?.trim()) {
+    return true;
+  }
+  return false;
+}
+
+export function applyWorkflowTakeoffFilter(
+  items: TakeoffItem[],
+  workflow: WorkflowTakeoffFilter,
+  context: {
+    takeoffAssemblies: TakeoffItemAssembly[];
+    pricingItems: PricingItem[];
+    standardLinks: StandardLink[];
+  }
+): TakeoffItem[] {
+  if (workflow === "all") {
+    return items;
+  }
+
+  const assemblyIds = new Set(
+    context.takeoffAssemblies.map((row) => row.takeoff_item_id)
+  );
+  const pricedIds = new Set(
+    context.pricingItems.map((row) => row.takeoff_item_id)
+  );
+  const standardsIds = new Set(
+    context.standardLinks
+      .filter((link) => link.entity_type === "takeoff_item")
+      .map((link) => link.entity_id)
+  );
+
+  return items.filter((item) => {
+    if (item.status === "excluded") {
+      return false;
+    }
+
+    switch (workflow) {
+      case "no_package":
+        return !assemblyIds.has(item.id);
+      case "no_pricing":
+        return !pricedIds.has(item.id);
+      case "no_drawing_reference":
+        return !hasDrawingReference(item);
+      case "no_standards_linked":
+        return !standardsIds.has(item.id);
+      case "outstanding_review":
+        return !item.reviewed;
+      default:
+        return true;
+    }
+  });
+}
+
 export function filterTakeoffItems(
   items: TakeoffItem[],
-  filters: TakeoffFilters
+  filters: TakeoffFilters,
+  workflowContext?: {
+    takeoffAssemblies: TakeoffItemAssembly[];
+    pricingItems: PricingItem[];
+    standardLinks: StandardLink[];
+  }
 ): TakeoffItem[] {
   const query = filters.search.trim().toLowerCase();
 
-  return items.filter((item) => {
+  let filtered = items.filter((item) => {
     if (filters.trade !== "all" && item.trade !== filters.trade) {
       return false;
     }
@@ -182,4 +288,14 @@ export function filterTakeoffItems(
 
     return drawingReferenceSearchText(item).includes(query);
   });
+
+  if (filters.workflow !== "all" && workflowContext) {
+    filtered = applyWorkflowTakeoffFilter(
+      filtered,
+      filters.workflow,
+      workflowContext
+    );
+  }
+
+  return filtered;
 }

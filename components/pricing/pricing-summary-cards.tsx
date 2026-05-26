@@ -1,3 +1,4 @@
+import { useOrganisationCurrency } from "@/components/layout/organisation-settings-provider";
 import {
   Card,
   CardDescription,
@@ -12,20 +13,22 @@ type PricingSummaryCardsProps = {
 };
 
 export function PricingSummaryCards({ totals }: PricingSummaryCardsProps) {
+  const currency = useOrganisationCurrency();
+
   const cards = [
     {
       label: "Total cost",
-      value: formatCurrency(totals.totalCost),
+      value: formatCurrency(totals.totalCost, currency),
       accent: "",
     },
     {
       label: "Total sell",
-      value: formatCurrency(totals.totalSell),
+      value: formatCurrency(totals.totalSell, currency),
       accent: "text-primary",
     },
     {
       label: "Gross profit",
-      value: formatCurrency(totals.grossProfit),
+      value: formatCurrency(totals.grossProfit, currency),
       accent: "text-emerald-700",
     },
     {
