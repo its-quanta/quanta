@@ -20,7 +20,9 @@ export function ProjectDocumentsPanel({
 }: ProjectDocumentsPanelProps) {
   return (
     <div className="flex flex-col gap-6">
-      <DocumentUploadZone projectId={projectId} />
+      <div id="project-document-upload">
+        <DocumentUploadZone projectId={projectId} />
+      </div>
 
       <Card>
         <CardHeader>

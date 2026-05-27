@@ -106,22 +106,24 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         }
       />
       <main className="flex-1 overflow-y-auto p-6">
-        <div className="mx-auto flex max-w-6xl flex-col gap-6">
+        <div className="mx-auto flex w-full max-w-[96rem] flex-col gap-6">
           <header className="flex flex-col gap-3 border-b border-border pb-6 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Tender project</p>
               <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
                 {project.name}
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                {project.client_name ?? "No client set"}
-                {project.tender_due_date
-                  ? ` · Due ${formatDate(project.tender_due_date)}`
-                  : ""}
+                {[project.client_name, project.trade_scope].filter(Boolean).join(" · ") ||
+                  "No client set"}
               </p>
             </div>
             <div className="flex flex-col items-start gap-2 sm:items-end">
               <ProjectStatusBadge status={project.status} />
+              <p className="text-sm text-muted-foreground">
+                {project.tender_due_date
+                  ? `Due ${formatDate(project.tender_due_date)}`
+                  : "No due date"}
+              </p>
               <p className="font-mono text-sm tabular-nums text-muted-foreground">
                 Est. {formatCurrency(project.estimated_value, currency)}
               </p>

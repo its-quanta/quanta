@@ -518,39 +518,39 @@ function actionForCheck(check: ValidationCheck): TenderValidationAction {
     case "doc-structural":
     case "doc-specification":
     case "doc-any":
-      return { id: "open-documents", label: "Upload documents", tab: "tender-inputs" };
+      return { id: "open-documents", label: "Upload documents", tab: "plans-specs" };
     case "doc-drawings-linked":
     case "takeoff-drawing-ref":
     case "takeoff-spec-ref":
     case "takeoff-exists":
     case "takeoff-quantities":
     case "takeoff-reviewed":
-      return { id: "open-takeoff", label: "Open takeoff", tab: "tender-inputs" };
+      return { id: "open-takeoff", label: "Open takeoff", tab: "takeoff" };
     case "package-missing":
     case "package-coverage":
     case "package-coverage-threshold":
       return {
         id: "apply-package",
         label: "Apply methodology",
-        tab: "tender-inputs",
+        tab: "takeoff",
       };
     case "pricing-coverage":
     case "pricing-unpriced":
     case "pricing-manual-share":
     case "pricing-margin":
-      return { id: "fix-pricing", label: "Fix pricing", tab: "commercial-review" };
+      return { id: "fix-pricing", label: "Fix pricing", tab: "commercial" };
     case "material-generated":
     case "material-reviewed":
       return {
         id: "review-materials",
         label: "Review materials",
-        tab: "scope-review",
+        tab: "build-up",
       };
     case "labour-generated":
     case "labour-reviewed":
-      return { id: "review-labour", label: "Review labour", tab: "scope-review" };
+      return { id: "review-labour", label: "Review labour", tab: "build-up" };
     case "standards-linked":
-      return { id: "add-standards", label: "Add standards", tab: "tender-inputs" };
+      return { id: "add-standards", label: "Add standards", tab: "takeoff" };
     case "submission-exclusions":
       return {
         id: "draft-exclusions",

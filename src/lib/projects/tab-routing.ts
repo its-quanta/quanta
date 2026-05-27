@@ -1,11 +1,14 @@
 import type { WorkspaceTabValue } from "@/src/lib/scope-gaps/types";
 
 const LEGACY_TAB_MAP: Record<string, WorkspaceTabValue> = {
-  documents: "tender-inputs",
-  takeoff: "tender-inputs",
-  materials: "scope-review",
-  labour: "scope-review",
-  pricing: "commercial-review",
+  documents: "plans-specs",
+  "tender-inputs": "plans-specs",
+  takeoff: "takeoff",
+  materials: "build-up",
+  labour: "build-up",
+  "scope-review": "build-up",
+  pricing: "commercial",
+  "commercial-review": "commercial",
   clarifications: "submission",
   export: "submission",
 };
@@ -27,10 +30,11 @@ export function resolveWorkspaceTab(
 export function isWorkspaceTab(value: string): value is WorkspaceTabValue {
   return (
     value === "overview" ||
-    value === "tender-inputs" ||
+    value === "plans-specs" ||
     value === "ai-review" ||
-    value === "scope-review" ||
-    value === "commercial-review" ||
+    value === "takeoff" ||
+    value === "build-up" ||
+    value === "commercial" ||
     value === "submission"
   );
 }
@@ -43,13 +47,13 @@ export function scopeGapFixTab(
     case "missing_package":
     case "missing_drawing_reference":
     case "missing_standards_reference":
-      return { tab: "tender-inputs" };
+      return { tab: "takeoff" };
     case "missing_pricing":
-      return { tab: "commercial-review", priceTakeoff: takeoffId };
+      return { tab: "commercial", priceTakeoff: takeoffId };
     case "missing_material_generation":
     case "missing_labour_generation":
-      return { tab: "scope-review" };
+      return { tab: "build-up" };
     default:
-      return { tab: "scope-review" };
+      return { tab: "build-up" };
   }
 }

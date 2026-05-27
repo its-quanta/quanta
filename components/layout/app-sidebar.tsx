@@ -3,12 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Search01Icon } from "@hugeicons/core-free-icons";
 
+import { useGlobalCommandOptional } from "@/components/command-palette/global-command-provider";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { mainNavItems } from "@/lib/navigation";
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const globalCommand = useGlobalCommandOptional();
 
   return (
     <aside className="flex h-full w-[244px] shrink-0 flex-col border-r border-border bg-card">
@@ -51,7 +55,22 @@ export function AppSidebar() {
         })}
       </nav>
 
-      <div className="border-t border-border p-4">
+      <div className="border-t border-border p-3">
+        {globalCommand ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mb-3 w-full justify-start gap-2 text-muted-foreground"
+            onClick={() => globalCommand.openCommandBar()}
+          >
+            <HugeiconsIcon icon={Search01Icon} className="size-4" />
+            Search…
+            <kbd className="ml-auto rounded border border-border px-1 text-[10px]">
+              ⌘K
+            </kbd>
+          </Button>
+        ) : null}
         <p className="text-xs text-muted-foreground">
           Estimating workspace for subcontractors.
         </p>

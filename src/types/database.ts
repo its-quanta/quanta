@@ -138,13 +138,24 @@ export type Document = {
 };
 
 /** Indexed page/sheet within an uploaded document (for structured takeoff links). */
+export type DocumentPageType =
+  | "floor_plan"
+  | "schedule"
+  | "specification"
+  | "other";
+
 export type DocumentPage = {
   id: string;
   organisation_id: string;
+  project_id?: string | null;
   document_id: string;
   page_number: number;
   sheet_number: string | null;
   sheet_title: string | null;
+  page_label?: string | null;
+  page_type?: DocumentPageType | null;
+  include_in_analysis?: boolean;
+  analysis_status?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -667,6 +678,7 @@ export type AiReviewItem = {
   drawing_reference: string | null;
   sheet_number: string | null;
   page_number: number | null;
+  overlay_geometry: unknown | null;
   result_takeoff_item_id: string | null;
   accepted_by: string | null;
   accepted_at: string | null;

@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { AssumptionsPanel } from "@/components/submission/assumptions-panel";
 import { ExclusionsPanel } from "@/components/submission/exclusions-panel";
 import { RfisPanel } from "@/components/submission/rfis-panel";
 import { SubmissionBlockersColumns } from "@/components/submission/submission-blockers-columns";
-import { TenderPackPreviewModal } from "@/components/submission/tender-pack-preview-modal";
 import { SubmissionReadinessSummary } from "@/components/submission/submission-readiness-summary";
 import { SubmissionStickyStatus } from "@/components/submission/submission-sticky-status";
 import { SubmissionTenderPackPanel } from "@/components/submission/submission-tender-pack-panel";
@@ -16,7 +15,6 @@ import { SubmissionExportSection } from "@/components/export/submission-export-s
 import { useOrganisationSettings } from "@/components/layout/organisation-settings-provider";
 import type { ExportProjectData } from "@/src/lib/export/types";
 import { buildSubmissionPreview } from "@/src/lib/submission/preview";
-import { buildTenderPackPreview } from "@/src/lib/submission/tender-pack-preview";
 import { validateTender } from "@/src/lib/submission/validate-tender";
 import type { PricingItemWithTakeoff } from "@/src/lib/pricing/queries";
 import type {
@@ -62,6 +60,7 @@ export function SubmissionPanel({
   scopeGapsTotal,
   exclusionsDraftedPercent,
 }: SubmissionPanelProps) {
+  const router = useRouter();
   const { settings, currency } = useOrganisationSettings();
   const searchParams = useSearchParams();
   const sectionParam = searchParams.get("section");
@@ -70,10 +69,6 @@ export function SubmissionPanel({
   const assumptionsRef = useRef<HTMLDivElement>(null);
   const rfisRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewGeneratedAt, setPreviewGeneratedAt] = useState<string | null>(
-    null
-  );
 
   const priceableTakeoff = useMemo(
     () => takeoffItems.filter((item) => item.status !== "excluded"),
@@ -119,41 +114,8 @@ export function SubmissionPanel({
     [documents, takeoffItems, pricingItems, materialItems, labourItems, clarifications]
   );
 
-  const tenderPackPreview = useMemo(
-    () =>
-      buildTenderPackPreview({
-        project,
-        organisationSettings: settings,
-        documents,
-        takeoffItems,
-        pricingItems,
-        takeoffAssemblies,
-        materialItems,
-        labourItems,
-        clarifications,
-        validation,
-        packContents,
-        generatedAt: previewGeneratedAt ?? new Date().toISOString(),
-      }),
-    [
-      project,
-      settings,
-      documents,
-      takeoffItems,
-      pricingItems,
-      takeoffAssemblies,
-      materialItems,
-      labourItems,
-      clarifications,
-      validation,
-      packContents,
-      previewGeneratedAt,
-    ]
-  );
-
   function openTenderPackPreview() {
-    setPreviewGeneratedAt(new Date().toISOString());
-    setPreviewOpen(true);
+    router.push(`/projects/${projectId}/tender-pack-preview`);
   }
 
   const critical = useMemo(
@@ -286,13 +248,6 @@ export function SubmissionPanel({
       <div ref={exportRef}>
         <SubmissionExportSection exportData={exportData} />
       </div>
-
-      <TenderPackPreviewModal
-        open={previewOpen}
-        onOpenChange={setPreviewOpen}
-        data={tenderPackPreview}
-        currency={currency}
-      />
     </div>
   );
 }

@@ -7,7 +7,11 @@ import { AiReviewAdjustDialog } from "@/components/ai-review/ai-review-adjust-di
 import { AiReviewConfidenceBadge } from "@/components/ai-review/ai-review-confidence-badge";
 import { AiReviewSourceDialog } from "@/components/ai-review/ai-review-source-dialog";
 import { AiReviewStatusBadge } from "@/components/ai-review/ai-review-status-badge";
+import { BulkActionBar } from "@/components/bulk-operations/bulk-action-bar";
+import { RowSelectionCheckbox } from "@/components/bulk-operations/row-selection-checkbox";
+import { useRowSelection } from "@/components/bulk-operations/use-row-selection";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -43,6 +47,8 @@ export function AiReviewTable({
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [adjustItem, setAdjustItem] = useState<AiReviewItem | null>(null);
   const [sourceItem, setSourceItem] = useState<AiReviewItem | null>(null);
+  const selection = useRowSelection();
+  const visibleIds = useMemo(() => items.map((item) => item.id), [items]);
 
   const drawingContext = useMemo(
     () => buildDrawingReferenceContext(documents, documentPages),
@@ -87,6 +93,13 @@ export function AiReviewTable({
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead className="w-10">
+                <RowSelectionCheckbox
+                  checked={selection.getHeaderCheckboxState(visibleIds)}
+                  ariaLabel="Select all AI review items"
+                  onChange={() => selection.selectAllVisible(visibleIds)}
+                />
+              </TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Confidence</TableHead>
               <TableHead>Trade</TableHead>
@@ -112,7 +125,23 @@ export function AiReviewTable({
                 : "—";
 
               return (
-                <TableRow key={item.id} className="align-top hover:bg-muted/20">
+                <TableRow
+                  key={item.id}
+                  className={cn(
+                    "align-top hover:bg-muted/20",
+                    selection.isSelected(item.id) && "bg-primary/5"
+                  )}
+                >
+                  <TableCell>
+                    <RowSelectionCheckbox
+                      checked={selection.isSelected(item.id)}
+                      ariaLabel={`Select ${item.description}`}
+                      onChange={() => undefined}
+                      onClick={(event) =>
+                        selection.handleRowSelect(item.id, visibleIds, event)
+                      }
+                    />
+                  </TableCell>
                   <TableCell>
                     <AiReviewStatusBadge status={item.status} />
                   </TableCell>
@@ -206,6 +235,64 @@ export function AiReviewTable({
           </TableBody>
         </Table>
       </div>
+
+      <BulkActionBar
+        selectedCount={selection.selectedCount}
+        onClear={selection.clearSelection}
+      >
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={isPending}
+          onClick={() => {
+            const pending = items.filter(
+              (item) =>
+                selection.selectedIds.has(item.id) &&
+                (item.status === "pending" || item.status === "adjusted")
+            );
+            startTransition(async () => {
+              for (const item of pending) {
+                const result = await acceptAiReviewItemAction(item.id, projectId);
+                if (result.error) {
+                  setActionError(result.error);
+                  return;
+                }
+              }
+              selection.clearSelection();
+              router.refresh();
+            });
+          }}
+        >
+          Accept selected
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="destructive"
+          disabled={isPending}
+          onClick={() => {
+            const pending = items.filter(
+              (item) =>
+                selection.selectedIds.has(item.id) &&
+                (item.status === "pending" || item.status === "adjusted")
+            );
+            startTransition(async () => {
+              for (const item of pending) {
+                const result = await rejectAiReviewItemAction(item.id, projectId);
+                if (result.error) {
+                  setActionError(result.error);
+                  return;
+                }
+              }
+              selection.clearSelection();
+              router.refresh();
+            });
+          }}
+        >
+          Reject selected
+        </Button>
+      </BulkActionBar>
 
       <AiReviewAdjustDialog
         item={adjustItem}

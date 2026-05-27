@@ -1,9 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import { BulkActionBar } from "@/components/bulk-operations/bulk-action-bar";
+import { RowSelectionCheckbox } from "@/components/bulk-operations/row-selection-checkbox";
+import { useRowSelection } from "@/components/bulk-operations/use-row-selection";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Card,
   CardContent,
@@ -22,6 +33,10 @@ import {
   DEFAULT_EXCLUSION_TEMPLATES,
   RFI_PRIORITY_LABELS,
 } from "@/src/lib/clarifications/constants";
+import {
+  bulkDeleteClarificationsAction,
+  bulkUpdateClarificationsAction,
+} from "@/src/lib/bulk-operations/actions";
 import {
   addClarificationFromDefaultTemplateAction,
   addClarificationFromTemplateAction,
@@ -73,6 +88,10 @@ export function ClarificationSection({
   const [formDrawingRef, setFormDrawingRef] = useState("");
   const [formTakeoffId, setFormTakeoffId] = useState("");
   const [formPriority, setFormPriority] = useState<RfiPriority>("medium");
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkPriority, setBulkPriority] = useState<RfiPriority>("medium");
+  const selection = useRowSelection();
+  const visibleIds = useMemo(() => items.map((item) => item.id), [items]);
 
   const typeTemplates = templates.filter((template) => template.type === type);
   const defaultTemplates =
@@ -175,12 +194,35 @@ export function ClarificationSection({
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
+            {items.length > 0 ? (
+              <li className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+                <RowSelectionCheckbox
+                  checked={selection.getHeaderCheckboxState(visibleIds)}
+                  ariaLabel="Select all clarifications"
+                  onChange={() => selection.selectAllVisible(visibleIds)}
+                />
+                <span>Select all</span>
+              </li>
+            ) : null}
             {items.map((item) => (
               <li
                 key={item.id}
-                className="rounded-md border border-border bg-muted/20 px-3 py-2"
+                className={cn(
+                  "rounded-md border border-border bg-muted/20 px-3 py-2",
+                  selection.isSelected(item.id) && "ring-1 ring-primary/40"
+                )}
               >
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex min-w-0 flex-1 gap-2">
+                    <RowSelectionCheckbox
+                      checked={selection.isSelected(item.id)}
+                      ariaLabel={`Select ${item.title}`}
+                      onChange={() => undefined}
+                      onClick={(event) =>
+                        selection.handleRowSelect(item.id, visibleIds, event)
+                      }
+                      className="mt-0.5"
+                    />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">{item.title}</p>
                     {item.description ? (
@@ -211,6 +253,7 @@ export function ClarificationSection({
                         Drawing: {item.related_drawing}
                       </p>
                     ) : null}
+                  </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-1">
                     {type === "rfi" ? (
@@ -281,6 +324,147 @@ export function ClarificationSection({
             </div>
           </div>
         )}
+
+        <BulkActionBar
+          selectedCount={selection.selectedCount}
+          onClear={selection.clearSelection}
+        >
+          {type === "rfi" ? (
+            <>
+              <select
+                className={cn(selectClassName, "h-8 w-auto")}
+                value={bulkPriority}
+                onChange={(event) =>
+                  setBulkPriority(event.target.value as RfiPriority)
+                }
+              >
+                {Object.entries(RFI_PRIORITY_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={isPending}
+                onClick={() => {
+                  startTransition(async () => {
+                    const result = await bulkUpdateClarificationsAction(
+                      projectId,
+                      selection.selectedIdList,
+                      { priority: bulkPriority }
+                    );
+                    if (result.error) {
+                      setError(result.error);
+                      return;
+                    }
+                    selection.clearSelection();
+                    refresh();
+                  });
+                }}
+              >
+                Change priority
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={isPending}
+                onClick={() => {
+                  startTransition(async () => {
+                    const result = await bulkUpdateClarificationsAction(
+                      projectId,
+                      selection.selectedIdList,
+                      { status: "open" }
+                    );
+                    if (result.error) {
+                      setError(result.error);
+                      return;
+                    }
+                    selection.clearSelection();
+                    refresh();
+                  });
+                }}
+              >
+                Mark open
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={isPending}
+              onClick={() => {
+                startTransition(async () => {
+                  const result = await bulkUpdateClarificationsAction(
+                    projectId,
+                    selection.selectedIdList,
+                    { reviewed: true }
+                  );
+                  if (result.error) {
+                    setError(result.error);
+                    return;
+                  }
+                  selection.clearSelection();
+                  refresh();
+                });
+              }}
+            >
+              Mark reviewed
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="destructive"
+            disabled={isPending}
+            onClick={() => setBulkDeleteOpen(true)}
+          >
+            Delete
+          </Button>
+        </BulkActionBar>
+
+        <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete selected items?</DialogTitle>
+              <DialogDescription>
+                Remove {selection.selectedCount} clarification
+                {selection.selectedCount === 1 ? "" : "s"}?
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setBulkDeleteOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={isPending}
+                onClick={() => {
+                  startTransition(async () => {
+                    await bulkDeleteClarificationsAction(
+                      projectId,
+                      selection.selectedIdList
+                    );
+                    setBulkDeleteOpen(false);
+                    selection.clearSelection();
+                    refresh();
+                  });
+                }}
+              >
+                Delete selected
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <div className="flex flex-col gap-3 border-t border-border pt-4">
           <p className="text-xs font-medium text-muted-foreground">

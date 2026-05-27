@@ -5,9 +5,15 @@ import { useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Add01Icon, Delete02Icon, Edit02Icon } from "@hugeicons/core-free-icons";
 
+import { BulkActionBar } from "@/components/bulk-operations/bulk-action-bar";
+import { BulkValueSheet } from "@/components/bulk-operations/bulk-value-sheet";
+import { InlineEditCell } from "@/components/bulk-operations/inline-edit-cell";
+import { RowSelectionCheckbox } from "@/components/bulk-operations/row-selection-checkbox";
+import { useRowSelection } from "@/components/bulk-operations/use-row-selection";
 import { EditPricingItemDialog } from "@/components/pricing/edit-pricing-item-dialog";
 import { LinkStandardsDialog } from "@/components/standards/link-standards-dialog";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,7 +37,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { deletePricingItemAction } from "@/src/lib/pricing/actions";
+import {
+  bulkDeletePricingItemsAction,
+  bulkMarkPricingTakeoffReviewedAction,
+  bulkUpdatePricingMarginAction,
+  bulkUpdatePricingMarkupAction,
+} from "@/src/lib/bulk-operations/actions";
+import {
+  deletePricingItemAction,
+  updatePricingItemAction,
+} from "@/src/lib/pricing/actions";
 import { formatPricingMethodLabel } from "@/src/lib/pricing/constants";
 import {
   formatPricingSourceShort,
@@ -89,6 +104,12 @@ export function PricingTable({
   );
   const [linkStandardsTarget, setLinkStandardsTarget] =
     useState<PricingItemWithTakeoff | null>(null);
+  const [bulkMarkupOpen, setBulkMarkupOpen] = useState(false);
+  const [bulkMarginOpen, setBulkMarginOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  const selection = useRowSelection();
+  const visibleIds = useMemo(() => items.map((item) => item.id), [items]);
 
   const assemblyByTakeoffId = useMemo(
     () =>
@@ -167,6 +188,13 @@ export function PricingTable({
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
               <TableRow>
+                <TableHead scope="col" className="w-10">
+                  <RowSelectionCheckbox
+                    checked={selection.getHeaderCheckboxState(visibleIds)}
+                    ariaLabel="Select all pricing lines"
+                    onChange={() => selection.selectAllVisible(visibleIds)}
+                  />
+                </TableHead>
                 <TableHead scope="col">Takeoff item</TableHead>
                 <TableHead scope="col">Method</TableHead>
                 <TableHead scope="col">Pricing source</TableHead>
@@ -209,7 +237,22 @@ export function PricingTable({
                 const isPackagePricing = item.pricing_method === "package";
 
                 return (
-                <TableRow key={item.id}>
+                <TableRow
+                  key={item.id}
+                  className={cn(
+                    selection.isSelected(item.id) && "bg-primary/5"
+                  )}
+                >
+                  <TableCell>
+                    <RowSelectionCheckbox
+                      checked={selection.isSelected(item.id)}
+                      ariaLabel={`Select ${item.takeoff_item.item_name}`}
+                      onChange={() => undefined}
+                      onClick={(event) =>
+                        selection.handleRowSelect(item.id, visibleIds, event)
+                      }
+                    />
+                  </TableCell>
                   <TableCell>
                     <div className="min-w-[140px]">
                       <p className="text-sm font-medium">
@@ -261,18 +304,90 @@ export function PricingTable({
                     {formatCurrency(item.total_cost)}
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {formatOptionalPercent(item.markup_percentage)}
+                    <InlineEditCell
+                      value={
+                        item.markup_percentage != null
+                          ? String(item.markup_percentage)
+                          : ""
+                      }
+                      displayValue={formatOptionalPercent(item.markup_percentage)}
+                      align="right"
+                      type="number"
+                      parse={(raw) => {
+                        const parsed = Number(raw);
+                        return Number.isNaN(parsed) ? null : parsed;
+                      }}
+                      onSave={async (value) => {
+                        const result = await updatePricingItemAction(
+                          item.id,
+                          projectId,
+                          {
+                            markup_percentage: Number(value),
+                            margin_percentage: null,
+                          }
+                        );
+                        if (!result.error) {
+                          router.refresh();
+                        }
+                        return result;
+                      }}
+                    />
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {formatOptionalPercent(item.margin_percentage)}
+                    <InlineEditCell
+                      value={
+                        item.margin_percentage != null
+                          ? String(item.margin_percentage)
+                          : ""
+                      }
+                      displayValue={formatOptionalPercent(item.margin_percentage)}
+                      align="right"
+                      type="number"
+                      parse={(raw) => {
+                        const parsed = Number(raw);
+                        return Number.isNaN(parsed) ? null : parsed;
+                      }}
+                      onSave={async (value) => {
+                        const result = await updatePricingItemAction(
+                          item.id,
+                          projectId,
+                          {
+                            margin_percentage: Number(value),
+                            markup_percentage: null,
+                          }
+                        );
+                        if (!result.error) {
+                          router.refresh();
+                        }
+                        return result;
+                      }}
+                    />
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm tabular-nums">
-                    {formatCurrency(item.sell_rate)}
-                    {item.sell_rate_overridden ? (
-                      <span className="ml-1 text-xs text-muted-foreground">
-                        (override)
-                      </span>
-                    ) : null}
+                    <InlineEditCell
+                      value={String(item.sell_rate)}
+                      displayValue={`${formatCurrency(item.sell_rate)}${item.sell_rate_overridden ? " (override)" : ""}`}
+                      align="right"
+                      type="number"
+                      parse={(raw) => {
+                        const parsed = Number(raw);
+                        return Number.isNaN(parsed) || parsed < 0 ? null : parsed;
+                      }}
+                      onSave={async (value) => {
+                        const result = await updatePricingItemAction(
+                          item.id,
+                          projectId,
+                          {
+                            sell_rate: Number(value),
+                            sell_rate_overridden: true,
+                          }
+                        );
+                        if (!result.error) {
+                          router.refresh();
+                        }
+                        return result;
+                      }}
+                    />
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm tabular-nums">
                     {formatCurrency(item.total_sell)}
@@ -324,6 +439,151 @@ export function PricingTable({
           </Table>
         </div>
       )}
+
+      <BulkActionBar
+        selectedCount={selection.selectedCount}
+        onClear={selection.clearSelection}
+      >
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={() => setBulkMarkupOpen(true)}
+        >
+          Apply markup
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={() => setBulkMarginOpen(true)}
+        >
+          Apply margin
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={() => {
+            const takeoffIds = items
+              .filter((row) => selection.selectedIds.has(row.id))
+              .map((row) => row.takeoff_item_id);
+            startTransition(async () => {
+              const result = await bulkMarkPricingTakeoffReviewedAction(
+                projectId,
+                takeoffIds
+              );
+              if (result.error) {
+                setActionError(result.error);
+                return;
+              }
+              setSuccessMessage(result.message ?? "Marked reviewed.");
+              selection.clearSelection();
+              router.refresh();
+            });
+          }}
+        >
+          Mark reviewed
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="destructive"
+          onClick={() => setBulkDeleteOpen(true)}
+        >
+          Delete
+        </Button>
+      </BulkActionBar>
+
+      <BulkValueSheet
+        open={bulkMarkupOpen}
+        onOpenChange={setBulkMarkupOpen}
+        title="Apply markup"
+        description="Set markup percentage on selected pricing lines"
+        label="Markup %"
+        inputType="number"
+        selectedCount={selection.selectedCount}
+        onApply={async (raw) => {
+          const value = Number(raw);
+          if (Number.isNaN(value)) {
+            return { error: "Enter a valid percentage." };
+          }
+          return bulkUpdatePricingMarkupAction(
+            projectId,
+            selection.selectedIdList,
+            value
+          );
+        }}
+        onSuccess={setSuccessMessage}
+        onComplete={selection.clearSelection}
+      />
+
+      <BulkValueSheet
+        open={bulkMarginOpen}
+        onOpenChange={setBulkMarginOpen}
+        title="Apply margin"
+        description="Set margin percentage on selected pricing lines"
+        label="Margin %"
+        inputType="number"
+        selectedCount={selection.selectedCount}
+        onApply={async (raw) => {
+          const value = Number(raw);
+          if (Number.isNaN(value)) {
+            return { error: "Enter a valid percentage." };
+          }
+          return bulkUpdatePricingMarginAction(
+            projectId,
+            selection.selectedIdList,
+            value
+          );
+        }}
+        onSuccess={setSuccessMessage}
+        onComplete={selection.clearSelection}
+      />
+
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete selected pricing lines?</DialogTitle>
+            <DialogDescription>
+              Remove {selection.selectedCount} pricing line
+              {selection.selectedCount === 1 ? "" : "s"}?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setBulkDeleteOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isPending}
+              onClick={() => {
+                startTransition(async () => {
+                  const result = await bulkDeletePricingItemsAction(
+                    projectId,
+                    selection.selectedIdList
+                  );
+                  setBulkDeleteOpen(false);
+                  if (result.error) {
+                    setActionError(result.error);
+                    return;
+                  }
+                  setSuccessMessage(result.message ?? "Deleted.");
+                  selection.clearSelection();
+                  router.refresh();
+                });
+              }}
+            >
+              Delete selected
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <LinkStandardsDialog
         open={linkStandardsTarget !== null}

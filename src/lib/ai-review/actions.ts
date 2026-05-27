@@ -2,11 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 
+import type { AiReviewApprovalAction } from "@/src/lib/ai-review/approval-history";
 import { AI_REVIEW_COLUMNS } from "@/src/lib/ai-review/constants";
 import { mapAiReviewItemRow } from "@/src/lib/ai-review/schema";
 import { requireOrganisationProfile } from "@/src/lib/auth/require-profile";
 import { createTakeoffItemAction } from "@/src/lib/takeoff/actions";
 import { createClient } from "@/src/lib/supabase/server";
+import type {
+  AiReviewTradeFocus,
+  AnalyseDocumentsResult,
+} from "@/src/lib/ai-review/document-analysis/types";
 import type { AiReviewItemAdjustInput } from "@/src/types/database";
 
 export type AiReviewActionResult = {
@@ -16,6 +21,31 @@ export type AiReviewActionResult = {
 
 function revalidateProject(projectId: string) {
   revalidatePath(`/projects/${projectId}`);
+}
+
+async function recordApprovalEvent(
+  organisationId: string,
+  projectId: string,
+  itemId: string,
+  action: AiReviewApprovalAction,
+  performedBy: string,
+  notes?: string | null,
+  segmentId?: string | null
+) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("ai_review_approval_events").insert({
+    organisation_id: organisationId,
+    project_id: projectId,
+    ai_review_item_id: itemId,
+    ai_review_segment_id: segmentId ?? null,
+    action,
+    notes: notes ?? null,
+    performed_by: performedBy,
+  });
+
+  if (error && !/relation .+ does not exist/i.test(error.message)) {
+    console.error("[ai_review_approval_events] recordApprovalEvent:", error.message);
+  }
 }
 
 async function fetchReviewItem(
@@ -84,6 +114,9 @@ export async function acceptAiReviewItemAction(
     page_number: item.page_number,
     sheet_number: item.sheet_number,
     notes: item.review_notes,
+    confidence_score: item.confidence,
+    ai_generated: true,
+    reviewed: false,
     status: "needs_review",
   });
 
@@ -106,6 +139,15 @@ export async function acceptAiReviewItemAction(
   if (updateError) {
     return { error: updateError.message };
   }
+
+  await recordApprovalEvent(
+    profile.organisation_id,
+    projectId,
+    itemId,
+    "approve",
+    profile.id,
+    item.review_notes
+  );
 
   revalidateProject(projectId);
   return { takeoffItemId: createResult.itemId };
@@ -140,6 +182,15 @@ export async function rejectAiReviewItemAction(
   if (error) {
     return { error: error.message };
   }
+
+  await recordApprovalEvent(
+    profile.organisation_id,
+    projectId,
+    itemId,
+    "reject",
+    profile.id,
+    loaded.item.review_notes
+  );
 
   revalidateProject(projectId);
   return {};
@@ -197,6 +248,111 @@ export async function adjustAiReviewItemAction(
   if (error) {
     return { error: error.message };
   }
+
+  await recordApprovalEvent(
+    profile.organisation_id,
+    projectId,
+    itemId,
+    "adjust",
+    profile.id,
+    input.review_notes?.trim() || null
+  );
+
+  revalidateProject(projectId);
+  return {};
+}
+
+export type AiReviewSegmentActionResult = { error?: string };
+
+export type {
+  AiReviewTradeFocus,
+  AnalyseDocumentsResult,
+} from "@/src/lib/ai-review/document-analysis/types";
+
+/** Quick path: analyse all small supported files (skips large PDFs). */
+export async function analyseProjectDocumentsAction(
+  projectId: string,
+  tradeFocus: AiReviewTradeFocus
+): Promise<AnalyseDocumentsResult> {
+  const { analyseSmallProjectDocumentsAction } = await import(
+    "@/src/lib/ai-review/document-analysis/actions"
+  );
+  return analyseSmallProjectDocumentsAction(projectId, tradeFocus);
+}
+
+export async function fetchAiReviewApprovalHistoryAction(
+  itemId: string,
+  projectId: string
+) {
+  const { profile } = await requireOrganisationProfile();
+  const { getAiReviewApprovalHistory } = await import("@/src/lib/ai-review/queries");
+  const events = await getAiReviewApprovalHistory(
+    itemId,
+    projectId,
+    profile.organisation_id
+  );
+  return { events };
+}
+
+export async function fetchAiReviewSegmentsAction(
+  itemId: string,
+  projectId: string
+) {
+  const { profile } = await requireOrganisationProfile();
+  const { getAiReviewSegmentsForItem } = await import("@/src/lib/ai-review/queries");
+  const segments = await getAiReviewSegmentsForItem(
+    itemId,
+    projectId,
+    profile.organisation_id
+  );
+  return { segments };
+}
+
+/** Future-ready: approve a single overlay segment without accepting the whole item. */
+export async function approveAiReviewSegmentAction(
+  segmentId: string,
+  projectId: string
+): Promise<AiReviewSegmentActionResult> {
+  const { profile } = await requireOrganisationProfile();
+  const supabase = await createClient();
+
+  const { data: segment, error: fetchError } = await supabase
+    .from("ai_review_segments")
+    .select("id, ai_review_item_id, organisation_id, project_id")
+    .eq("id", segmentId)
+    .eq("project_id", projectId)
+    .eq("organisation_id", profile.organisation_id)
+    .maybeSingle();
+
+  if (fetchError) {
+    if (/relation .+ does not exist/i.test(fetchError.message)) {
+      return { error: "Segment approval is not available yet." };
+    }
+    return { error: fetchError.message };
+  }
+
+  if (!segment) {
+    return { error: "Segment not found." };
+  }
+
+  const { error } = await supabase
+    .from("ai_review_segments")
+    .update({ status: "accepted" })
+    .eq("id", segmentId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  await recordApprovalEvent(
+    profile.organisation_id,
+    projectId,
+    String(segment.ai_review_item_id),
+    "approve",
+    profile.id,
+    null,
+    segmentId
+  );
 
   revalidateProject(projectId);
   return {};

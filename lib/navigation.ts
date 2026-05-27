@@ -5,6 +5,7 @@ import {
   FileEditIcon,
   Folder01Icon,
   Settings01Icon,
+  Upload04Icon,
 } from "@hugeicons/core-free-icons";
 
 export type NavItem = {
@@ -19,5 +20,6 @@ export const mainNavItems: NavItem[] = [
   { title: "Assemblies", href: "/templates", icon: FileEditIcon },
   { title: "Standards", href: "/standards", icon: BookOpen01Icon },
   { title: "Rates", href: "/rates", icon: Calculator01Icon },
+  { title: "Imports", href: "/imports", icon: Upload04Icon },
   { title: "Settings", href: "/settings", icon: Settings01Icon },
 ];

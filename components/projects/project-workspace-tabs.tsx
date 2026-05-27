@@ -3,14 +3,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { useGlobalCommand } from "@/components/command-palette/global-command-provider";
+import { TakeoffRelationshipsProvider } from "@/components/takeoff/takeoff-relationships-context";
+import { buildProjectCommandIndex } from "@/src/lib/command/build-project-index";
 import { AiReviewPanel } from "@/components/projects/ai-review-panel";
+import { BuildUpPanel } from "@/components/projects/build-up-panel";
 import { CommercialReviewPanel } from "@/components/projects/commercial-review-panel";
+import { PlansSpecsPanel } from "@/components/projects/plans-specs-panel";
 import { ProjectOverviewPanel } from "@/components/projects/project-overview-panel";
-import { ScopeReviewPanel } from "@/components/projects/scope-review-panel";
+import { ProjectWorkflowProgressBar } from "@/components/projects/project-workflow-progress-bar";
 import { SubmissionPanel } from "@/components/projects/submission-panel";
-import { TenderInputsPanel } from "@/components/projects/tender-inputs-panel";
+import { TakeoffTabPanel } from "@/components/projects/takeoff-tab-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { computeProjectReadiness } from "@/src/lib/projects/readiness";
+import { computeWorkspaceSteps } from "@/src/lib/projects/workspace-steps";
 import {
   isWorkspaceTab,
   resolveWorkspaceTab,
@@ -37,10 +43,11 @@ import type {
 
 const workspaceTabs = [
   { value: "overview", label: "Overview" },
-  { value: "tender-inputs", label: "Tender Inputs" },
+  { value: "plans-specs", label: "Plans & Specs" },
   { value: "ai-review", label: "AI Review" },
-  { value: "scope-review", label: "Scope Review" },
-  { value: "commercial-review", label: "Commercial Review" },
+  { value: "takeoff", label: "Takeoff" },
+  { value: "build-up", label: "Build Up" },
+  { value: "commercial", label: "Commercial" },
   { value: "submission", label: "Submission" },
 ] as const;
 
@@ -86,6 +93,7 @@ export function ProjectWorkspaceTabs({
   aiReviewItems,
 }: ProjectWorkspaceTabsProps) {
   const router = useRouter();
+  const { setWorkspaceContext } = useGlobalCommand();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
   const priceTakeoffParam = searchParams.get("priceTakeoff");
@@ -121,13 +129,26 @@ export function ProjectWorkspaceTabs({
     ]
   );
 
+  const workflowSteps = useMemo(
+    () =>
+      computeWorkspaceSteps({
+        documentsCount: documents.length,
+        aiReviewItems,
+        readiness,
+        submissionReady: readiness.readyForSubmission,
+        scopeGapsTotal: scopeGapSummary.totalGaps,
+        scopeGapsByKind: scopeGapSummary.byKind,
+      }),
+    [documents.length, aiReviewItems, readiness, scopeGapSummary.byKind, scopeGapSummary.totalGaps]
+  );
+
   useEffect(() => {
     setActiveTab(resolveWorkspaceTab(tabParam));
   }, [tabParam]);
 
   useEffect(() => {
     if (priceTakeoffParam) {
-      setActiveTab("commercial-review");
+      setActiveTab("commercial");
       setPricingTakeoffId(priceTakeoffParam);
     }
   }, [priceTakeoffParam]);
@@ -154,7 +175,7 @@ export function ProjectWorkspaceTabs({
   function handleScopeGapNavigate(tab: string, takeoffId?: string) {
     if (!isWorkspaceTab(tab)) {
       const resolved = resolveWorkspaceTab(tab);
-      if (takeoffId && resolved === "commercial-review") {
+      if (takeoffId && resolved === "commercial") {
         navigateTab(resolved, { priceTakeoff: takeoffId });
         return;
       }
@@ -162,7 +183,7 @@ export function ProjectWorkspaceTabs({
       return;
     }
 
-    if (tab === "commercial-review" && takeoffId) {
+    if (tab === "commercial" && takeoffId) {
       navigateTab(tab, { priceTakeoff: takeoffId });
       return;
     }
@@ -172,142 +193,233 @@ export function ProjectWorkspaceTabs({
 
   function handlePriceManual(takeoffItemId: string) {
     setPricingTakeoffId(takeoffItemId);
-    navigateTab("commercial-review", { priceTakeoff: takeoffItemId });
+    navigateTab("commercial", { priceTakeoff: takeoffItemId });
   }
 
   function clearPricingTakeoffParam() {
     setPricingTakeoffId(null);
-    navigateTab("commercial-review");
+    navigateTab("commercial");
   }
 
-  return (
-    <Tabs
-      value={activeTab}
-      onValueChange={(value) => {
-        if (isWorkspaceTab(value)) {
-          navigateTab(value);
+  const projectCommandEntries = useMemo(
+    () =>
+      buildProjectCommandIndex({
+        projectId: project.id,
+        projectName: project.name,
+        takeoffItems,
+        pricingItems,
+        materialItems,
+        labourItems,
+        clarifications,
+        documents,
+      }),
+    [
+      project.id,
+      project.name,
+      takeoffItems,
+      pricingItems,
+      materialItems,
+      labourItems,
+      clarifications,
+      documents,
+    ]
+  );
+
+  useEffect(() => {
+    setWorkspaceContext({
+      projectId: project.id,
+      projectName: project.name,
+      projectEntries: projectCommandEntries,
+      navigateTab: (tab, options) => {
+        if (isWorkspaceTab(tab)) {
+          navigateTab(tab, options);
         }
-      }}
-      className="gap-4"
-    >
-      <TabsList
-        variant="line"
-        className="h-auto w-full flex-wrap justify-start gap-1"
+      },
+      onApplyPackage: () => {
+        window.dispatchEvent(new CustomEvent("quanta:bulk-apply-package"));
+      },
+      onFocusTakeoffSearch: () => {
+        document.getElementById("takeoff-search")?.focus();
+      },
+    });
+
+    return () => setWorkspaceContext(null);
+  }, [
+    navigateTab,
+    project.id,
+    project.name,
+    projectCommandEntries,
+    setWorkspaceContext,
+  ]);
+
+  const isReviewTab = activeTab === "ai-review";
+
+  return (
+    <>
+      <TakeoffRelationshipsProvider
+        projectId={project.id}
+        documents={documents}
+        documentPages={documentPages}
+        takeoffItems={takeoffItems}
+        takeoffAssemblies={takeoffAssemblies}
+        assemblyPackages={assemblyPackages}
+        pricingItems={pricingItemsPlain}
+        materialItems={materialItems}
+        labourItems={labourItems}
+        projectStandardLinks={projectStandardLinks}
+        clarifications={clarifications}
+        scopeGapSummary={scopeGapSummary}
+        onNavigateTab={navigateTab}
       >
-        {workspaceTabs.map((tab) => (
-          <TabsTrigger key={tab.value} value={tab.value}>
-            {tab.label}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-
-      <TabsContent value="overview">
-        <ProjectOverviewPanel
-          project={project}
-          readiness={readiness}
-          scopeGapSummary={scopeGapSummary}
-          onNavigateTab={(tab, takeoffId) => {
-            if (takeoffId && tab === "commercial-review") {
-              navigateTab(tab, { priceTakeoff: takeoffId });
-              return;
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => {
+            if (isWorkspaceTab(value)) {
+              navigateTab(value);
             }
-            navigateTab(tab);
           }}
-        />
-      </TabsContent>
+          className="gap-4"
+        >
+          <ProjectWorkflowProgressBar
+            steps={workflowSteps}
+            activeTab={activeTab}
+            onNavigateStep={navigateTab}
+          />
 
-      <TabsContent value="tender-inputs">
-        <TenderInputsPanel
-          projectId={project.id}
-          documents={documents}
-          documentPages={documentPages}
-          takeoffItems={takeoffItems}
-          assemblyPackages={assemblyPackages}
-          takeoffAssemblies={takeoffAssemblies}
-          pricingItems={pricingItemsPlain}
-          organisationStandards={organisationStandards}
-          projectStandardLinks={projectStandardLinks}
-          onPriceManual={handlePriceManual}
-        />
-      </TabsContent>
+          <TabsList
+            variant="line"
+            className="h-auto w-full flex-wrap justify-start gap-1"
+          >
+            {workspaceTabs.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value}>
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-      <TabsContent value="ai-review">
-        <AiReviewPanel
-          projectId={project.id}
-          items={aiReviewItems}
-          documents={documents}
-          documentPages={documentPages}
-          scopeGapSummary={scopeGapSummary}
-        />
-      </TabsContent>
+          <TabsContent value="overview">
+            <ProjectOverviewPanel
+              project={project}
+              readiness={readiness}
+              scopeGapSummary={scopeGapSummary}
+              workflowSteps={workflowSteps}
+              onNavigateTab={(tab, takeoffId) => {
+                if (takeoffId && tab === "commercial") {
+                  navigateTab(tab, { priceTakeoff: takeoffId });
+                  return;
+                }
+                navigateTab(tab);
+              }}
+            />
+          </TabsContent>
 
-      <TabsContent value="scope-review">
-        <ScopeReviewPanel
-          projectId={project.id}
-          documents={documents}
-          documentPages={documentPages}
-          takeoffItems={takeoffItems}
-          takeoffAssemblies={takeoffAssemblies}
-          pricingItems={pricingItems}
-          pricingItemsPlain={pricingItemsPlain}
-          materialItems={materialItems}
-          labourItems={labourItems}
-          assemblyPackages={assemblyPackages}
-          organisationStandards={organisationStandards}
-          projectStandardLinks={projectStandardLinks}
-          standardLinks={standardLinks}
-          estimateLoadError={estimateLoadError}
-          onNavigateTab={(tab, takeoffId) => {
-            if (takeoffId && tab === "commercial-review") {
-              navigateTab(tab, { priceTakeoff: takeoffId });
-              return;
-            }
-            navigateTab(tab);
-          }}
-          pricingTakeoffId={
-            activeTab === "scope-review" ? pricingTakeoffId : null
-          }
-          onPricingTakeoffConsumed={clearPricingTakeoffParam}
-        />
-      </TabsContent>
+          <TabsContent value="plans-specs">
+            <PlansSpecsPanel
+              projectId={project.id}
+              documents={documents}
+              documentPages={documentPages}
+            />
+          </TabsContent>
 
-      <TabsContent value="commercial-review">
-        <CommercialReviewPanel
-          project={project}
-          projectId={project.id}
-          pricingItems={pricingItems}
-          takeoffItems={takeoffItems}
-          takeoffAssemblies={takeoffAssemblies}
-          assemblyPackages={assemblyPackages}
-          pricingItemsPlain={pricingItemsPlain}
-          materialItems={materialItems}
-          labourItems={labourItems}
-          organisationStandards={organisationStandards}
-          projectStandardLinks={projectStandardLinks}
-          scopeGapsTotal={scopeGapSummary.totalGaps}
-          exclusionsDraftedPercent={readiness.exclusionsDraftedPercent}
-          pricingTakeoffId={pricingTakeoffId}
-          onPricingTakeoffConsumed={clearPricingTakeoffParam}
-        />
-      </TabsContent>
+          <TabsContent value="ai-review" className={isReviewTab ? "mt-0" : undefined}>
+            <AiReviewPanel
+              projectId={project.id}
+              items={aiReviewItems}
+              documents={documents}
+              documentPages={documentPages}
+              takeoffItems={takeoffItems}
+              takeoffAssemblies={takeoffAssemblies}
+              assemblyPackages={assemblyPackages}
+              materialItems={materialItems}
+              labourItems={labourItems}
+              pricingItems={pricingItemsPlain}
+            />
+          </TabsContent>
 
-      <TabsContent value="submission">
-        <SubmissionPanel
-          project={project}
-          projectId={project.id}
-          documents={documents}
-          takeoffItems={takeoffItems}
-          pricingItems={pricingItems}
-          takeoffAssemblies={takeoffAssemblies}
-          materialItems={materialItems}
-          labourItems={labourItems}
-          standardLinks={standardLinks}
-          clarifications={clarifications}
-          templates={clarificationTemplates}
-          scopeGapsTotal={scopeGapSummary.totalGaps}
-          exclusionsDraftedPercent={readiness.exclusionsDraftedPercent}
-        />
-      </TabsContent>
-    </Tabs>
+          <TabsContent value="takeoff">
+            <TakeoffTabPanel
+              projectId={project.id}
+              documents={documents}
+              documentPages={documentPages}
+              takeoffItems={takeoffItems}
+              assemblyPackages={assemblyPackages}
+              takeoffAssemblies={takeoffAssemblies}
+              pricingItems={pricingItemsPlain}
+              organisationStandards={organisationStandards}
+              projectStandardLinks={projectStandardLinks}
+              onPriceManual={handlePriceManual}
+            />
+          </TabsContent>
+
+          <TabsContent value="build-up">
+            <BuildUpPanel
+              projectId={project.id}
+              documents={documents}
+              documentPages={documentPages}
+              takeoffItems={takeoffItems}
+              takeoffAssemblies={takeoffAssemblies}
+              pricingItems={pricingItems}
+              pricingItemsPlain={pricingItemsPlain}
+              materialItems={materialItems}
+              labourItems={labourItems}
+              assemblyPackages={assemblyPackages}
+              organisationStandards={organisationStandards}
+              projectStandardLinks={projectStandardLinks}
+              standardLinks={standardLinks}
+              estimateLoadError={estimateLoadError}
+              onNavigateTab={(tab, takeoffId) => {
+                if (takeoffId && tab === "commercial") {
+                  navigateTab(tab, { priceTakeoff: takeoffId });
+                  return;
+                }
+                navigateTab(tab);
+              }}
+              pricingTakeoffId={
+                activeTab === "build-up" ? pricingTakeoffId : null
+              }
+              onPricingTakeoffConsumed={clearPricingTakeoffParam}
+            />
+          </TabsContent>
+
+          <TabsContent value="commercial">
+            <CommercialReviewPanel
+              project={project}
+              projectId={project.id}
+              pricingItems={pricingItems}
+              takeoffItems={takeoffItems}
+              takeoffAssemblies={takeoffAssemblies}
+              assemblyPackages={assemblyPackages}
+              pricingItemsPlain={pricingItemsPlain}
+              materialItems={materialItems}
+              labourItems={labourItems}
+              organisationStandards={organisationStandards}
+              projectStandardLinks={projectStandardLinks}
+              scopeGapsTotal={scopeGapSummary.totalGaps}
+              exclusionsDraftedPercent={readiness.exclusionsDraftedPercent}
+              pricingTakeoffId={pricingTakeoffId}
+              onPricingTakeoffConsumed={clearPricingTakeoffParam}
+            />
+          </TabsContent>
+
+          <TabsContent value="submission">
+            <SubmissionPanel
+              project={project}
+              projectId={project.id}
+              documents={documents}
+              takeoffItems={takeoffItems}
+              pricingItems={pricingItems}
+              takeoffAssemblies={takeoffAssemblies}
+              materialItems={materialItems}
+              labourItems={labourItems}
+              standardLinks={standardLinks}
+              clarifications={clarifications}
+              templates={clarificationTemplates}
+              scopeGapsTotal={scopeGapSummary.totalGaps}
+              exclusionsDraftedPercent={readiness.exclusionsDraftedPercent}
+            />
+          </TabsContent>
+        </Tabs>
+      </TakeoffRelationshipsProvider>
+    </>
   );
 }

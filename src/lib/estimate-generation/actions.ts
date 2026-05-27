@@ -49,6 +49,24 @@ export async function reviewProjectMaterialItemAction(
   itemId: string,
   projectId: string
 ): Promise<EstimateActionResult> {
+  return reviewProjectMaterialItemsAction(projectId, [itemId]);
+}
+
+export async function reviewProjectLabourItemAction(
+  itemId: string,
+  projectId: string
+): Promise<EstimateActionResult> {
+  return reviewProjectLabourItemsAction(projectId, [itemId]);
+}
+
+export async function reviewProjectMaterialItemsAction(
+  projectId: string,
+  itemIds: string[]
+): Promise<EstimateActionResult & { updatedCount?: number; failedCount?: number; message?: string }> {
+  if (itemIds.length === 0) {
+    return { error: "No items selected." };
+  }
+
   const session = await requireProjectSession(projectId);
 
   if ("error" in session) {
@@ -59,22 +77,31 @@ export async function reviewProjectMaterialItemAction(
   const { error } = await supabase
     .from("project_material_items")
     .update({ reviewed: true })
-    .eq("id", itemId)
     .eq("project_id", projectId)
-    .eq("organisation_id", session.profile.organisation_id);
+    .eq("organisation_id", session.profile.organisation_id)
+    .in("id", itemIds);
 
   if (error) {
     return { error: error.message };
   }
 
+  const updatedCount = itemIds.length;
   revalidatePath(`/projects/${projectId}`);
-  return {};
+  return {
+    updatedCount,
+    failedCount: Math.max(0, itemIds.length - updatedCount),
+    message: `${updatedCount} material line${updatedCount === 1 ? "" : "s"} marked reviewed`,
+  };
 }
 
-export async function reviewProjectLabourItemAction(
-  itemId: string,
-  projectId: string
-): Promise<EstimateActionResult> {
+export async function reviewProjectLabourItemsAction(
+  projectId: string,
+  itemIds: string[]
+): Promise<EstimateActionResult & { updatedCount?: number; failedCount?: number; message?: string }> {
+  if (itemIds.length === 0) {
+    return { error: "No items selected." };
+  }
+
   const session = await requireProjectSession(projectId);
 
   if ("error" in session) {
@@ -85,14 +112,178 @@ export async function reviewProjectLabourItemAction(
   const { error } = await supabase
     .from("project_labour_items")
     .update({ reviewed: true })
-    .eq("id", itemId)
     .eq("project_id", projectId)
-    .eq("organisation_id", session.profile.organisation_id);
+    .eq("organisation_id", session.profile.organisation_id)
+    .in("id", itemIds);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  const updatedCount = itemIds.length;
+  revalidatePath(`/projects/${projectId}`);
+  return {
+    updatedCount,
+    failedCount: Math.max(0, itemIds.length - updatedCount),
+    message: `${updatedCount} labour line${updatedCount === 1 ? "" : "s"} marked reviewed`,
+  };
+}
+
+export async function updateProjectMaterialItemsAction(
+  projectId: string,
+  itemIds: string[],
+  updates: { supplier?: string | null }
+): Promise<EstimateActionResult & { updatedCount?: number; failedCount?: number; message?: string }> {
+  if (itemIds.length === 0) {
+    return { error: "No items selected." };
+  }
+
+  const session = await requireProjectSession(projectId);
+
+  if ("error" in session) {
+    return { error: session.error };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("project_material_items")
+    .update({ supplier: updates.supplier ?? null })
+    .eq("project_id", projectId)
+    .eq("organisation_id", session.profile.organisation_id)
+    .in("id", itemIds);
 
   if (error) {
     return { error: error.message };
   }
 
   revalidatePath(`/projects/${projectId}`);
-  return {};
+  return {
+    updatedCount: itemIds.length,
+    message: `${itemIds.length} material line${itemIds.length === 1 ? "" : "s"} updated`,
+  };
+}
+
+export async function updateProjectLabourItemsAction(
+  projectId: string,
+  itemIds: string[],
+  updates: { charge_rate?: number }
+): Promise<EstimateActionResult & { updatedCount?: number; failedCount?: number; message?: string }> {
+  if (itemIds.length === 0) {
+    return { error: "No items selected." };
+  }
+
+  if (updates.charge_rate !== undefined && updates.charge_rate < 0) {
+    return { error: "Charge rate cannot be negative." };
+  }
+
+  const session = await requireProjectSession(projectId);
+
+  if ("error" in session) {
+    return { error: session.error };
+  }
+
+  const supabase = await createClient();
+
+  if (updates.charge_rate !== undefined) {
+    const { data: rows, error: fetchError } = await supabase
+      .from("project_labour_items")
+      .select("id, hours")
+      .eq("project_id", projectId)
+      .eq("organisation_id", session.profile.organisation_id)
+      .in("id", itemIds);
+
+    if (fetchError) {
+      return { error: fetchError.message };
+    }
+
+    for (const row of rows ?? []) {
+      const hours = Number(row.hours);
+      const totalSell = hours * updates.charge_rate;
+      const { error } = await supabase
+        .from("project_labour_items")
+        .update({
+          charge_rate: updates.charge_rate,
+          total_sell: totalSell,
+        })
+        .eq("id", row.id)
+        .eq("project_id", projectId)
+        .eq("organisation_id", session.profile.organisation_id);
+
+      if (error) {
+        return { error: error.message };
+      }
+    }
+  }
+
+  revalidatePath(`/projects/${projectId}`);
+  return {
+    updatedCount: itemIds.length,
+    message: `${itemIds.length} labour line${itemIds.length === 1 ? "" : "s"} updated`,
+  };
+}
+
+export async function deleteProjectMaterialItemsAction(
+  projectId: string,
+  itemIds: string[]
+): Promise<EstimateActionResult & { updatedCount?: number; failedCount?: number; message?: string }> {
+  if (itemIds.length === 0) {
+    return { error: "No items selected." };
+  }
+
+  const session = await requireProjectSession(projectId);
+
+  if ("error" in session) {
+    return { error: session.error };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("project_material_items")
+    .delete()
+    .eq("project_id", projectId)
+    .eq("organisation_id", session.profile.organisation_id)
+    .in("id", itemIds);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/projects/${projectId}`);
+  return {
+    updatedCount: itemIds.length,
+    message: `${itemIds.length} material line${itemIds.length === 1 ? "" : "s"} deleted`,
+  };
+}
+
+export async function deleteProjectLabourItemsAction(
+  projectId: string,
+  itemIds: string[]
+): Promise<EstimateActionResult & { updatedCount?: number; failedCount?: number; message?: string }> {
+  if (itemIds.length === 0) {
+    return { error: "No items selected." };
+  }
+
+  const session = await requireProjectSession(projectId);
+
+  if ("error" in session) {
+    return { error: session.error };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("project_labour_items")
+    .delete()
+    .eq("project_id", projectId)
+    .eq("organisation_id", session.profile.organisation_id)
+    .in("id", itemIds);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/projects/${projectId}`);
+  return {
+    updatedCount: itemIds.length,
+    message: `${itemIds.length} labour line${itemIds.length === 1 ? "" : "s"} deleted`,
+  };
 }

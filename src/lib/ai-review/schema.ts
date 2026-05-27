@@ -28,6 +28,7 @@ export function mapAiReviewItemRow(row: Record<string, unknown>): AiReviewItem {
       row.page_number === null || row.page_number === undefined
         ? null
         : Number(row.page_number),
+    overlay_geometry: row.overlay_geometry ?? null,
     result_takeoff_item_id:
       row.result_takeoff_item_id != null
         ? String(row.result_takeoff_item_id)

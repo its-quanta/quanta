@@ -15,9 +15,18 @@ import {
   Copy01Icon,
   Delete02Icon,
   Edit02Icon,
+  LinkSquare01Icon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
+import { useTakeoffRelationshipsOptional } from "@/components/takeoff/takeoff-relationships-context";
 
+import { BulkActionBar } from "@/components/bulk-operations/bulk-action-bar";
+import { BulkApplyPackageSheet } from "@/components/bulk-operations/bulk-apply-package-sheet";
+import { BulkValueSheet } from "@/components/bulk-operations/bulk-value-sheet";
+import { InlineEditCell } from "@/components/bulk-operations/inline-edit-cell";
+import { RowSelectionCheckbox } from "@/components/bulk-operations/row-selection-checkbox";
+import { useEstimatorShortcuts } from "@/components/bulk-operations/use-estimator-shortcuts";
+import { useRowSelection } from "@/components/bulk-operations/use-row-selection";
 import { AddTakeoffItemDialog } from "@/components/takeoff/add-takeoff-item-dialog";
 import { LinkStandardsDialog } from "@/components/standards/link-standards-dialog";
 import { ApplyPackageDialog } from "@/components/takeoff/apply-package-dialog";
@@ -57,10 +66,16 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import {
+  bulkDeleteTakeoffItemsAction,
+  bulkMarkTakeoffReviewedAction,
+  bulkUpdateTakeoffTradeAction,
+} from "@/src/lib/bulk-operations/actions";
+import {
   deleteTakeoffItemAction,
   duplicateTakeoffItemAction,
   markTakeoffItemReviewedAction,
   markTakeoffItemUnreviewedAction,
+  updateTakeoffItemAction,
 } from "@/src/lib/takeoff/actions";
 import { formatPricingSourceLabel } from "@/src/lib/pricing/pricing-source";
 import {
@@ -132,10 +147,27 @@ export function TakeoffTable({
   );
   const [sourceItem, setSourceItem] = useState<TakeoffItem | null>(null);
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
+  const [bulkPackageOpen, setBulkPackageOpen] = useState(false);
+  const [bulkTradeOpen, setBulkTradeOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  const selection = useRowSelection();
+  const takeoffRelationships = useTakeoffRelationshipsOptional();
 
   useEffect(() => {
     setItems(initialItems);
   }, [initialItems]);
+
+  useEffect(() => {
+    function onBulkApplyPackage() {
+      if (selection.selectedCount > 0) {
+        setBulkPackageOpen(true);
+      }
+    }
+    window.addEventListener("quanta:bulk-apply-package", onBulkApplyPackage);
+    return () =>
+      window.removeEventListener("quanta:bulk-apply-package", onBulkApplyPackage);
+  }, [selection.selectedCount]);
 
   const drawingContext = useMemo(
     () => buildDrawingReferenceContext(documents, documentPages),
@@ -177,6 +209,64 @@ export function TakeoffTable({
     [items, filters, workflowContext]
   );
 
+  const visibleIds = useMemo(
+    () => filteredItems.map((item) => item.id),
+    [filteredItems]
+  );
+
+  const selectedTakeoffItems = useMemo(
+    () => items.filter((item) => selection.selectedIds.has(item.id)),
+    [items, selection.selectedIds]
+  );
+
+  useEstimatorShortcuts({
+    enabled: filteredItems.length > 0,
+    onSearch: () => {
+      document.getElementById("takeoff-search")?.focus();
+    },
+    onEditSelected: () => {
+      const first = selectedTakeoffItems[0];
+      if (first) {
+        setEditItem(first);
+      }
+    },
+    onApplyPackage: () => {
+      if (selection.selectedCount > 0) {
+        setBulkPackageOpen(true);
+      }
+    },
+    onMarkReviewed: () => {
+      if (selection.selectedCount === 0) {
+        return;
+      }
+      startTransition(async () => {
+        const result = await bulkMarkTakeoffReviewedAction(
+          projectId,
+          selection.selectedIdList
+        );
+        if (result.error) {
+          setActionError(result.error);
+          return;
+        }
+        setSuccessMessage(result.message ?? "Marked reviewed.");
+        selection.clearSelection();
+        router.refresh();
+      });
+    },
+    onDeleteSelected: () => {
+      if (selection.selectedCount > 0) {
+        setBulkDeleteOpen(true);
+      }
+    },
+    onEscape: () => {
+      setBulkPackageOpen(false);
+      setBulkTradeOpen(false);
+      setBulkDeleteOpen(false);
+      setEditItem(null);
+      setDeleteTarget(null);
+    },
+  });
+
   function runRowAction(
     itemId: string,
     action: () => Promise<{ error?: string }>
@@ -200,10 +290,37 @@ export function TakeoffTable({
   const columns = useMemo<ColumnDef<TakeoffItem>[]>(
     () => [
       {
+        id: "select",
+        header: () => (
+          <RowSelectionCheckbox
+            checked={selection.getHeaderCheckboxState(visibleIds)}
+            ariaLabel="Select all visible takeoff lines"
+            onChange={() => selection.selectAllVisible(visibleIds)}
+          />
+        ),
+        cell: ({ row }) => (
+          <RowSelectionCheckbox
+            checked={selection.isSelected(row.original.id)}
+            ariaLabel={`Select ${row.original.item_name}`}
+            onChange={() => undefined}
+            onClick={(event) =>
+              selection.handleRowSelect(row.original.id, visibleIds, event)
+            }
+          />
+        ),
+      },
+      {
         accessorKey: "trade",
         header: "Trade",
         cell: ({ row }) => (
-          <span className="text-sm">{row.original.trade}</span>
+          <InlineEditCell
+            value={row.original.trade}
+            onSave={async (value) =>
+              updateTakeoffItemAction(row.original.id, projectId, {
+                trade: String(value),
+              })
+            }
+          />
         ),
       },
       {
@@ -250,9 +367,29 @@ export function TakeoffTable({
         accessorKey: "quantity",
         header: () => <span className="block text-right">Quantity</span>,
         cell: ({ row }) => (
-          <span className="block text-right font-mono text-sm tabular-nums">
-            {row.original.quantity}
-          </span>
+          <InlineEditCell
+            value={String(row.original.quantity)}
+            align="right"
+            type="number"
+            parse={(raw) => {
+              const parsed = Number(raw);
+              if (Number.isNaN(parsed) || parsed < 0) {
+                return null;
+              }
+              return parsed;
+            }}
+            onSave={async (value) => {
+              const result = await updateTakeoffItemAction(
+                row.original.id,
+                projectId,
+                { quantity: Number(value) }
+              );
+              if (!result.error) {
+                router.refresh();
+              }
+              return result;
+            }}
+          />
         ),
       },
       {
@@ -282,9 +419,22 @@ export function TakeoffTable({
         id: "drawing_reference",
         header: "Drawing ref",
         cell: ({ row }) => (
-          <span className="max-w-[140px] truncate font-mono text-sm tabular-nums">
-            {row.original.drawing_reference?.trim() || "—"}
-          </span>
+          <InlineEditCell
+            value={row.original.drawing_reference?.trim() ?? ""}
+            displayValue={row.original.drawing_reference?.trim() || "—"}
+            className="max-w-[140px]"
+            onSave={async (value) => {
+              const result = await updateTakeoffItemAction(
+                row.original.id,
+                projectId,
+                { drawing_reference: String(value).trim() || null }
+              );
+              if (!result.error) {
+                router.refresh();
+              }
+              return result;
+            }}
+          />
         ),
       },
       {
@@ -300,9 +450,44 @@ export function TakeoffTable({
         accessorKey: "page_number",
         header: () => <span className="block text-right">Page</span>,
         cell: ({ row }) => (
-          <span className="block text-right font-mono text-sm tabular-nums">
-            {row.original.page_number ?? "—"}
-          </span>
+          <InlineEditCell
+            value={
+              row.original.page_number != null
+                ? String(row.original.page_number)
+                : ""
+            }
+            displayValue={
+              row.original.page_number != null
+                ? String(row.original.page_number)
+                : "—"
+            }
+            align="right"
+            type="number"
+            parse={(raw) => {
+              if (!raw.trim()) {
+                return null;
+              }
+              const parsed = Number(raw);
+              if (Number.isNaN(parsed) || parsed <= 0) {
+                return null;
+              }
+              return parsed;
+            }}
+            onSave={async (value) => {
+              const result = await updateTakeoffItemAction(
+                row.original.id,
+                projectId,
+                {
+                  page_number:
+                    value === null || value === "" ? null : Number(value),
+                }
+              );
+              if (!result.error) {
+                router.refresh();
+              }
+              return result;
+            }}
+          />
         ),
       },
       {
@@ -404,6 +589,21 @@ export function TakeoffTable({
           const hasPackage = takeoffAssembliesByItemId.has(row.original.id);
 
           return (
+          <div className="flex items-center justify-end gap-1">
+            {takeoffRelationships ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                title="Open relationships"
+                aria-label={`Open relationships for ${row.original.item_name}`}
+                onClick={() =>
+                  takeoffRelationships.openRelationships(row.original)
+                }
+              >
+                <HugeiconsIcon icon={LinkSquare01Icon} strokeWidth={2} />
+              </Button>
+            ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -420,6 +620,16 @@ export function TakeoffTable({
                 <HugeiconsIcon icon={Edit02Icon} strokeWidth={2} />
                 Edit
               </DropdownMenuItem>
+              {takeoffRelationships ? (
+                <DropdownMenuItem
+                  onClick={() =>
+                    takeoffRelationships.openRelationships(row.original)
+                  }
+                >
+                  <HugeiconsIcon icon={LinkSquare01Icon} strokeWidth={2} />
+                  Open relationships
+                </DropdownMenuItem>
+              ) : null}
               {row.original.status !== "excluded" ? (
                 <DropdownMenuItem
                   onClick={() => setApplyPackageItem(row.original)}
@@ -477,12 +687,14 @@ export function TakeoffTable({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
           );
         },
       },
     ],
     [
       assemblyPackages.length,
+      takeoffRelationships,
       drawingContext,
       isPending,
       onPriceManual,
@@ -490,7 +702,10 @@ export function TakeoffTable({
       pendingRowId,
       pricingByTakeoffId,
       projectId,
+      router,
+      selection,
       takeoffAssembliesByItemId,
+      visibleIds,
     ]
   );
 
@@ -620,7 +835,13 @@ export function TakeoffTable({
             </TableHeader>
             <TableBody>
               {table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} className="align-top hover:bg-muted/20">
+                <TableRow
+                  key={row.id}
+                  className={cn(
+                    "align-top hover:bg-muted/20",
+                    selection.isSelected(row.original.id) && "bg-primary/5"
+                  )}
+                >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id} className="py-2">
                       {flexRender(
@@ -718,6 +939,163 @@ export function TakeoffTable({
           }
         }}
       />
+
+      <BulkActionBar
+        selectedCount={selection.selectedCount}
+        onClear={selection.clearSelection}
+      >
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={assemblyPackages.length === 0 || isPending}
+          onClick={() => setBulkPackageOpen(true)}
+        >
+          Apply methodology
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={isPending}
+          onClick={() => setBulkTradeOpen(true)}
+        >
+          Assign trade
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={isPending}
+          onClick={() => {
+            startTransition(async () => {
+              const result = await bulkMarkTakeoffReviewedAction(
+                projectId,
+                selection.selectedIdList
+              );
+              if (result.error) {
+                setActionError(result.error);
+                return;
+              }
+              setSuccessMessage(result.message ?? "Marked reviewed.");
+              selection.clearSelection();
+              router.refresh();
+            });
+          }}
+        >
+          Mark reviewed
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={organisationStandards.length === 0 || isPending}
+          onClick={() => {
+            const first = selectedTakeoffItems[0];
+            if (first) {
+              setLinkStandardsItem(first);
+            }
+          }}
+        >
+          Link standard
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={isPending}
+          onClick={() => {
+            const first = selectedTakeoffItems[0];
+            if (first) {
+              setSourceItem(first);
+            }
+          }}
+        >
+          Assign source
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="destructive"
+          disabled={isPending}
+          onClick={() => setBulkDeleteOpen(true)}
+        >
+          Delete
+        </Button>
+      </BulkActionBar>
+
+      <BulkApplyPackageSheet
+        projectId={projectId}
+        open={bulkPackageOpen}
+        onOpenChange={setBulkPackageOpen}
+        selectedItems={selectedTakeoffItems}
+        assemblyPackages={assemblyPackages}
+        onSuccess={setSuccessMessage}
+        onComplete={selection.clearSelection}
+      />
+
+      <BulkValueSheet
+        open={bulkTradeOpen}
+        onOpenChange={setBulkTradeOpen}
+        title="Assign trade"
+        description="Apply the same trade to selected takeoff lines"
+        label="Trade"
+        placeholder="e.g. Carpentry"
+        selectedCount={selection.selectedCount}
+        onApply={async (trade) =>
+          bulkUpdateTakeoffTradeAction(projectId, selection.selectedIdList, trade)
+        }
+        onSuccess={setSuccessMessage}
+        onComplete={selection.clearSelection}
+      />
+
+      <Dialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete selected takeoff lines?</DialogTitle>
+            <DialogDescription>
+              Remove {selection.selectedCount} line
+              {selection.selectedCount === 1 ? "" : "s"}? This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setBulkDeleteOpen(false)}
+              disabled={isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isPending}
+              onClick={() => {
+                startTransition(async () => {
+                  const result = await bulkDeleteTakeoffItemsAction(
+                    projectId,
+                    selection.selectedIdList
+                  );
+                  setBulkDeleteOpen(false);
+                  if (result.error) {
+                    setActionError(result.error);
+                    return;
+                  }
+                  setSuccessMessage(result.message ?? "Deleted.");
+                  selection.clearSelection();
+                  router.refresh();
+                });
+              }}
+            >
+              {isPending ? "Deleting…" : "Delete selected"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(deleteTarget)}

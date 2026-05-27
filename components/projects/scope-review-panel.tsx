@@ -1,7 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
+import { BulkActionBar } from "@/components/bulk-operations/bulk-action-bar";
+import { BulkApplyPackageSheet } from "@/components/bulk-operations/bulk-apply-package-sheet";
+import { RowSelectionCheckbox } from "@/components/bulk-operations/row-selection-checkbox";
+import { useRowSelection } from "@/components/bulk-operations/use-row-selection";
+import { useTakeoffRelationshipsOptional } from "@/components/takeoff/takeoff-relationships-context";
 import { ApplyPackageDialog } from "@/components/takeoff/apply-package-dialog";
 import { TakeoffSourceDialog } from "@/components/takeoff/takeoff-source-dialog";
 import {
@@ -14,6 +20,8 @@ import {
 } from "@/components/projects/workflow-metric-cards";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { bulkMarkTakeoffReviewedAction } from "@/src/lib/bulk-operations/actions";
 import {
   Card,
   CardContent,
@@ -98,6 +106,11 @@ export function ScopeReviewPanel({
   const [showBuildUp, setShowBuildUp] = useState<"materials" | "labour" | null>(
     null
   );
+  const [bulkPackageOpen, setBulkPackageOpen] = useState(false);
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const selection = useRowSelection();
+  const takeoffRelationships = useTakeoffRelationshipsOptional();
 
   const drawingContext = useMemo(
     () => buildDrawingReferenceContext(documents, documentPages),
@@ -140,6 +153,15 @@ export function ScopeReviewPanel({
   );
 
   const issueRows = rows.filter((row) => row.issues.length > 0);
+  const visibleIds = useMemo(
+    () => issueRows.map((row) => row.takeoffItemId),
+    [issueRows]
+  );
+  const selectedTakeoffItems = useMemo(
+    () =>
+      takeoffItems.filter((item) => selection.selectedIds.has(item.id)),
+    [takeoffItems, selection.selectedIds]
+  );
 
   return (
     <div className="flex flex-col gap-8">
@@ -197,6 +219,13 @@ export function ScopeReviewPanel({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead scope="col" className="w-10">
+                  <RowSelectionCheckbox
+                    checked={selection.getHeaderCheckboxState(visibleIds)}
+                    ariaLabel="Select all scope review lines"
+                    onChange={() => selection.selectAllVisible(visibleIds)}
+                  />
+                </TableHead>
                 <TableHead scope="col">Takeoff item</TableHead>
                 <TableHead scope="col">Trade</TableHead>
                 <TableHead scope="col">Package</TableHead>
@@ -218,7 +247,7 @@ export function ScopeReviewPanel({
             <TableBody>
               {issueRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={14} className="text-muted-foreground">
+                  <TableCell colSpan={15} className="text-muted-foreground">
                     No outstanding issues on priceable takeoff lines.
                   </TableCell>
                 </TableRow>
@@ -226,7 +255,27 @@ export function ScopeReviewPanel({
                 issueRows.map((row) => {
                   const takeoff = takeoffById.get(row.takeoffItemId);
                   return (
-                    <TableRow key={row.takeoffItemId}>
+                    <TableRow
+                      key={row.takeoffItemId}
+                      className={cn(
+                        selection.isSelected(row.takeoffItemId) &&
+                          "bg-primary/5"
+                      )}
+                    >
+                      <TableCell>
+                        <RowSelectionCheckbox
+                          checked={selection.isSelected(row.takeoffItemId)}
+                          ariaLabel={`Select ${row.itemName}`}
+                          onChange={() => undefined}
+                          onClick={(event) =>
+                            selection.handleRowSelect(
+                              row.takeoffItemId,
+                              visibleIds,
+                              event
+                            )
+                          }
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">
                         {row.itemName}
                       </TableCell>
@@ -284,6 +333,18 @@ export function ScopeReviewPanel({
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex flex-wrap justify-end gap-1">
+                          {takeoff && takeoffRelationships ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                takeoffRelationships.openRelationships(takeoff)
+                              }
+                            >
+                              Relationships
+                            </Button>
+                          ) : null}
                           {takeoff ? (
                             <Button
                               type="button"
@@ -311,7 +372,7 @@ export function ScopeReviewPanel({
                               size="sm"
                               onClick={() =>
                                 onNavigateTab(
-                                  "commercial-review",
+                                  "commercial",
                                   row.takeoffItemId
                                 )
                               }
@@ -324,7 +385,7 @@ export function ScopeReviewPanel({
                               type="button"
                               variant="outline"
                               size="sm"
-                              onClick={() => onNavigateTab("tender-inputs")}
+                              onClick={() => onNavigateTab("takeoff")}
                             >
                               Link standard
                             </Button>
@@ -367,7 +428,7 @@ export function ScopeReviewPanel({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => onNavigateTab("tender-inputs")}
+          onClick={() => onNavigateTab("takeoff")}
         >
           Open takeoff workspace
         </Button>
@@ -375,7 +436,7 @@ export function ScopeReviewPanel({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => onNavigateTab("commercial-review")}
+          onClick={() => onNavigateTab("commercial")}
         >
           Open pricing workspace
         </Button>
@@ -413,6 +474,48 @@ export function ScopeReviewPanel({
           onInitialTakeoffConsumed={onPricingTakeoffConsumed}
         />
       ) : null}
+
+      <BulkActionBar
+        selectedCount={selection.selectedCount}
+        onClear={selection.clearSelection}
+      >
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={assemblyPackages.length === 0 || isPending}
+          onClick={() => setBulkPackageOpen(true)}
+        >
+          Apply methodology
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={isPending}
+          onClick={() => {
+            startTransition(async () => {
+              await bulkMarkTakeoffReviewedAction(
+                projectId,
+                selection.selectedIdList
+              );
+              selection.clearSelection();
+              router.refresh();
+            });
+          }}
+        >
+          Mark reviewed
+        </Button>
+      </BulkActionBar>
+
+      <BulkApplyPackageSheet
+        projectId={projectId}
+        open={bulkPackageOpen}
+        onOpenChange={setBulkPackageOpen}
+        selectedItems={selectedTakeoffItems}
+        assemblyPackages={assemblyPackages}
+        onComplete={selection.clearSelection}
+      />
 
       <TakeoffSourceDialog
         item={sourceItem}

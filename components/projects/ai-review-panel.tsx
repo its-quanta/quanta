@@ -1,27 +1,30 @@
 "use client";
 
-import { useMemo } from "react";
-
-import { AiReviewSummaryCards } from "@/components/ai-review/ai-review-summary";
-import { AiReviewTable } from "@/components/ai-review/ai-review-table";
+import { AiReviewCanvas } from "@/components/ai-review/ai-review-canvas";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { computeAiReviewSummary } from "@/src/lib/ai-review/summary";
-import type { ScopeGapSummary } from "@/src/lib/scope-gaps/types";
-import type { AiReviewItem, Document, DocumentPage } from "@/src/types/database";
+import type {
+  AiReviewItem,
+  AssemblyPackage,
+  Document,
+  DocumentPage,
+  PricingItem,
+  ProjectLabourItem,
+  ProjectMaterialItem,
+  TakeoffItem,
+  TakeoffItemAssemblyWithPackage,
+} from "@/src/types/database";
 
 type AiReviewPanelProps = {
   projectId: string;
   items: AiReviewItem[];
   documents: Document[];
   documentPages: DocumentPage[];
-  scopeGapSummary: ScopeGapSummary;
+  takeoffItems: TakeoffItem[];
+  takeoffAssemblies: TakeoffItemAssemblyWithPackage[];
+  assemblyPackages: AssemblyPackage[];
+  materialItems: ProjectMaterialItem[];
+  labourItems: ProjectLabourItem[];
+  pricingItems: PricingItem[];
 };
 
 export function AiReviewPanel({
@@ -29,47 +32,68 @@ export function AiReviewPanel({
   items,
   documents,
   documentPages,
-  scopeGapSummary,
+  takeoffItems,
+  takeoffAssemblies,
+  assemblyPackages,
+  materialItems,
+  labourItems,
+  pricingItems,
 }: AiReviewPanelProps) {
-  const summary = useMemo(() => computeAiReviewSummary(items), [items]);
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-lg font-medium">AI review</h2>
+            <p className="text-sm text-muted-foreground">
+              AI suggestions will appear here after document analysis is run.
+            </p>
+          </div>
+          <Badge variant="outline" className="shrink-0 text-muted-foreground">
+            Review
+          </Badge>
+        </div>
+
+        <div className="rounded-lg border border-dashed border-border bg-muted/20 px-6 py-14 text-center">
+          <p className="text-sm font-medium text-foreground">
+            No AI suggestions to review
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Run analysis on your documents to generate draft suggestions. Quanta
+            never adds lines to your live estimate until you approve them.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-medium">AI review</h2>
           <p className="text-sm text-muted-foreground">
-            Review AI takeoff suggestions before they enter your live estimate.
-            No extraction runs in this release — queue only.
+            Evidence-backed approval on the drawing. Viewer-first workflow — no
+            extraction or OCR in this release.
           </p>
         </div>
         <Badge variant="outline" className="shrink-0 text-muted-foreground">
-          Review desk · infrastructure
+          Review mode
         </Badge>
       </div>
 
-      <AiReviewSummaryCards
-        summary={summary}
-        scopeGapsIdentified={scopeGapSummary.totalGaps}
+      <AiReviewCanvas
+        projectId={projectId}
+        items={items}
+        documents={documents}
+        documentPages={documentPages}
+        takeoffItems={takeoffItems}
+        takeoffAssemblies={takeoffAssemblies}
+        assemblyPackages={assemblyPackages}
+        materialItems={materialItems}
+        labourItems={labourItems}
+        pricingItems={pricingItems}
       />
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">AI suggestions</CardTitle>
-          <CardDescription>
-            Accept to add a takeoff line, reject to dismiss, or adjust before
-            accepting. Reasoning is stored for traceability when AI is enabled.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AiReviewTable
-            projectId={projectId}
-            items={items}
-            documents={documents}
-            documentPages={documentPages}
-          />
-        </CardContent>
-      </Card>
     </div>
   );
 }

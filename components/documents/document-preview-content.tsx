@@ -80,7 +80,7 @@ export function DocumentPreviewContent({
         <iframe
           title={document.file_name}
           src={signedUrl}
-          className="h-[min(70vh,560px)] w-full rounded-lg border border-border bg-muted/10"
+          className="h-[min(78vh,720px)] w-full rounded-lg border border-border bg-muted/10"
           onError={() => setEmbedFailed(true)}
         />
         <p className="text-xs text-muted-foreground">

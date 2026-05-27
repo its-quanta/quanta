@@ -5,8 +5,21 @@ import { useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Tick02Icon } from "@hugeicons/core-free-icons";
 
+import { BulkActionBar } from "@/components/bulk-operations/bulk-action-bar";
+import { InlineEditCell } from "@/components/bulk-operations/inline-edit-cell";
+import { RowSelectionCheckbox } from "@/components/bulk-operations/row-selection-checkbox";
+import { useRowSelection } from "@/components/bulk-operations/use-row-selection";
 import { EstimateReviewBadge } from "@/components/estimate/estimate-review-badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -23,6 +36,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  bulkDeleteLabourItemsAction,
+  bulkReviewLabourItemsAction,
+  bulkUpdateLabourChargeRateAction,
+} from "@/src/lib/bulk-operations/actions";
 import { reviewProjectLabourItemAction } from "@/src/lib/estimate-generation/actions";
 import { formatCurrency, formatQuantity } from "@/src/lib/format";
 import type { ProjectLabourItem } from "@/src/types/database";
@@ -44,6 +62,9 @@ export function ProjectLabourTable({
   const [reviewFilter, setReviewFilter] = useState(ALL_FILTER);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const selection = useRowSelection();
 
   useEffect(() => {
     setItems(initialItems);
@@ -71,6 +92,11 @@ export function ProjectLabourTable({
       return true;
     });
   }, [items, packageFilter, reviewFilter]);
+
+  const visibleIds = useMemo(
+    () => filteredItems.map((item) => item.id),
+    [filteredItems]
+  );
 
   function handleReview(itemId: string) {
     startTransition(async () => {
@@ -137,6 +163,12 @@ export function ProjectLabourTable({
         </div>
       </div>
 
+      {successMessage ? (
+        <p className="text-sm text-emerald-700" role="status">
+          {successMessage}
+        </p>
+      ) : null}
+
       {actionError ? (
         <p className="text-sm text-destructive" role="alert">
           {actionError}
@@ -147,6 +179,13 @@ export function ProjectLabourTable({
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
             <TableRow>
+              <TableHead scope="col" className="w-10">
+                <RowSelectionCheckbox
+                  checked={selection.getHeaderCheckboxState(visibleIds)}
+                  ariaLabel="Select all labour lines"
+                  onChange={() => selection.selectAllVisible(visibleIds)}
+                />
+              </TableHead>
               <TableHead scope="col">Labour role</TableHead>
               <TableHead scope="col">Hours</TableHead>
               <TableHead scope="col">Unit</TableHead>
@@ -165,7 +204,7 @@ export function ProjectLabourTable({
             {filteredItems.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={10}
+                  colSpan={11}
                   className="py-8 text-center text-sm text-muted-foreground"
                 >
                   No labour lines match the current filters.
@@ -173,7 +212,22 @@ export function ProjectLabourTable({
               </TableRow>
             ) : (
               filteredItems.map((item) => (
-                <TableRow key={item.id}>
+                <TableRow
+                  key={item.id}
+                  className={cn(
+                    selection.isSelected(item.id) && "bg-primary/5"
+                  )}
+                >
+                  <TableCell>
+                    <RowSelectionCheckbox
+                      checked={selection.isSelected(item.id)}
+                      ariaLabel={`Select ${item.labour_name}`}
+                      onChange={() => undefined}
+                      onClick={(event) =>
+                        selection.handleRowSelect(item.id, visibleIds, event)
+                      }
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{item.labour_name}</TableCell>
                   <TableCell className="font-mono text-sm tabular-nums">
                     {formatQuantity(item.hours)}
@@ -183,7 +237,27 @@ export function ProjectLabourTable({
                     {formatCurrency(item.cost_rate)}
                   </TableCell>
                   <TableCell className="font-mono text-sm tabular-nums">
-                    {formatCurrency(item.charge_rate)}
+                    <InlineEditCell
+                      value={String(item.charge_rate)}
+                      displayValue={formatCurrency(item.charge_rate)}
+                      align="right"
+                      type="number"
+                      parse={(raw) => {
+                        const parsed = Number(raw);
+                        return Number.isNaN(parsed) || parsed < 0 ? null : parsed;
+                      }}
+                      onSave={async (value) => {
+                        const result = await bulkUpdateLabourChargeRateAction(
+                          projectId,
+                          [item.id],
+                          Number(value)
+                        );
+                        if (!result.error) {
+                          router.refresh();
+                        }
+                        return result;
+                      }}
+                    />
                   </TableCell>
                   <TableCell className="font-mono text-sm tabular-nums">
                     {formatCurrency(item.total_cost)}
@@ -219,6 +293,86 @@ export function ProjectLabourTable({
           </TableBody>
         </Table>
       </div>
+
+      <BulkActionBar
+        selectedCount={selection.selectedCount}
+        onClear={selection.clearSelection}
+      >
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={() => {
+            startTransition(async () => {
+              const result = await bulkReviewLabourItemsAction(
+                projectId,
+                selection.selectedIdList
+              );
+              if (result.error) {
+                setActionError(result.error);
+                return;
+              }
+              setSuccessMessage(result.message ?? "Marked reviewed.");
+              selection.clearSelection();
+              router.refresh();
+            });
+          }}
+        >
+          Mark reviewed
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="destructive"
+          onClick={() => setBulkDeleteOpen(true)}
+        >
+          Delete
+        </Button>
+      </BulkActionBar>
+
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete selected labour lines?</DialogTitle>
+            <DialogDescription>
+              Remove {selection.selectedCount} line
+              {selection.selectedCount === 1 ? "" : "s"} from this estimate?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setBulkDeleteOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isPending}
+              onClick={() => {
+                startTransition(async () => {
+                  const result = await bulkDeleteLabourItemsAction(
+                    projectId,
+                    selection.selectedIdList
+                  );
+                  setBulkDeleteOpen(false);
+                  if (result.error) {
+                    setActionError(result.error);
+                    return;
+                  }
+                  setSuccessMessage(result.message ?? "Deleted.");
+                  selection.clearSelection();
+                  router.refresh();
+                });
+              }}
+            >
+              Delete selected
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

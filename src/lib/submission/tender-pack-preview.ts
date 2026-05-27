@@ -2,11 +2,13 @@ import { computePricingSummary } from "@/src/lib/pricing/summary";
 import { formatPricingSourceLabel } from "@/src/lib/pricing/pricing-source";
 import type { OrganisationSettingsSnapshot } from "@/src/lib/organisations/settings";
 import type { PricingItemWithTakeoff } from "@/src/lib/pricing/queries";
+import { computeAverageMarginPercent } from "@/src/lib/pricing/calculations";
 import type {
   Document,
   Project,
   ProjectLabourItem,
   ProjectMaterialItem,
+  StandardLinkWithStandard,
   TakeoffItem,
   TakeoffItemAssemblyWithPackage,
   TenderClarification,
@@ -24,6 +26,28 @@ export type TenderPackCoverSummary = {
   tenderValue: number | null;
   organisationName: string;
   generatedAt: string;
+  issueDate: string;
+  revision: string;
+};
+
+export type TenderPackTradeSummaryRow = {
+  trade: string;
+  lineCount: number;
+  totalSell: number;
+  marginPercent: number | null;
+};
+
+export type TenderPackMethodologyRow = {
+  packageName: string;
+  trade: string | null;
+  unit: string;
+  usageCount: number;
+};
+
+export type TenderPackStandardRow = {
+  referenceCode: string;
+  name: string;
+  standardType: string;
 };
 
 export type TenderPackCommercialSummary = {
@@ -89,12 +113,15 @@ export type TenderPackReadinessSection = {
 export type TenderPackPreviewData = {
   cover: TenderPackCoverSummary;
   commercial: TenderPackCommercialSummary;
+  tradeSummaries: TenderPackTradeSummaryRow[];
   pricingSchedule: TenderPackPricingRow[];
   materials: TenderPackMaterialRow[];
   labour: TenderPackLabourRow[];
   exclusions: TenderPackClarificationRow[];
   assumptions: TenderPackClarificationRow[];
   rfisAndClarifications: TenderPackClarificationRow[];
+  methodologies: TenderPackMethodologyRow[];
+  standards: TenderPackStandardRow[];
   documents: TenderPackDocumentRow[];
   readiness: TenderPackReadinessSection | null;
 };
@@ -157,6 +184,90 @@ function buildReadinessSection(
   };
 }
 
+function buildTradeSummaries(
+  pricingItems: PricingItemWithTakeoff[]
+): TenderPackTradeSummaryRow[] {
+  const byTrade = new Map<
+    string,
+    { sell: number; cost: number; count: number }
+  >();
+
+  for (const item of pricingItems) {
+    const trade = item.takeoff_item.trade;
+    const existing = byTrade.get(trade) ?? { sell: 0, cost: 0, count: 0 };
+    existing.sell += item.total_sell;
+    existing.cost += item.total_cost;
+    existing.count += 1;
+    byTrade.set(trade, existing);
+  }
+
+  return [...byTrade.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([trade, stats]) => ({
+      trade,
+      lineCount: stats.count,
+      totalSell: stats.sell,
+      marginPercent: computeAverageMarginPercent(
+        stats.sell,
+        stats.sell - stats.cost
+      ),
+    }));
+}
+
+function buildMethodologies(
+  takeoffAssemblies: TakeoffItemAssemblyWithPackage[]
+): TenderPackMethodologyRow[] {
+  const byPackage = new Map<string, TenderPackMethodologyRow>();
+
+  for (const row of takeoffAssemblies) {
+    const key = row.assembly_package_id;
+    const existing = byPackage.get(key);
+    if (existing) {
+      existing.usageCount += 1;
+    } else {
+      byPackage.set(key, {
+        packageName: row.assembly_package.name,
+        trade: null,
+        unit: row.assembly_package.unit,
+        usageCount: 1,
+      });
+    }
+  }
+
+  return [...byPackage.values()].sort((a, b) =>
+    a.packageName.localeCompare(b.packageName)
+  );
+}
+
+function buildStandards(
+  standardLinks: StandardLinkWithStandard[]
+): TenderPackStandardRow[] {
+  const seen = new Set<string>();
+  const rows: TenderPackStandardRow[] = [];
+
+  for (const link of standardLinks) {
+    if (seen.has(link.standard_id)) {
+      continue;
+    }
+    seen.add(link.standard_id);
+    rows.push({
+      referenceCode: link.standard.reference_code,
+      name: link.standard.name,
+      standardType: link.standard.standard_type.replace(/_/g, " "),
+    });
+  }
+
+  return rows.sort((a, b) => a.referenceCode.localeCompare(b.referenceCode));
+}
+
+function formatRevisionLabel(project: Project, generatedAt: string): string {
+  const date = generatedAt.slice(0, 10);
+  if (project.status) {
+    return `${project.status.replace(/_/g, " ")} · ${date}`;
+  }
+  return date;
+}
+
 export function buildTenderPackPreview(input: {
   project: Project;
   organisationSettings: OrganisationSettingsSnapshot;
@@ -167,6 +278,7 @@ export function buildTenderPackPreview(input: {
   materialItems: ProjectMaterialItem[];
   labourItems: ProjectLabourItem[];
   clarifications: TenderClarification[];
+  standardLinks?: StandardLinkWithStandard[];
   validation: TenderValidationResult;
   packContents: SubmissionPreviewData;
   generatedAt?: string;
@@ -181,6 +293,7 @@ export function buildTenderPackPreview(input: {
     materialItems,
     labourItems,
     clarifications,
+    standardLinks = [],
     validation,
     packContents,
     generatedAt = new Date().toISOString(),
@@ -255,6 +368,10 @@ export function buildTenderPackPreview(input: {
     .filter((row) => row.type === "rfi" || row.type === "clarification")
     .map(mapClarification);
 
+  const tradeSummaries = buildTradeSummaries(pricingItems);
+  const methodologies = buildMethodologies(takeoffAssemblies);
+  const standards = buildStandards(standardLinks);
+
   return {
     cover: {
       projectName: project.name,
@@ -267,6 +384,8 @@ export function buildTenderPackPreview(input: {
         (pricingSummary.totalSell > 0 ? pricingSummary.totalSell : null),
       organisationName: organisationSettings.name,
       generatedAt,
+      issueDate: generatedAt,
+      revision: formatRevisionLabel(project, generatedAt),
     },
     commercial: {
       totalCost: pricingSummary.totalCost,
@@ -276,12 +395,15 @@ export function buildTenderPackPreview(input: {
       pricingCoveragePercent: percent(pricedCount, priceableTakeoff.length),
       packageCoveragePercent: percent(packageApplied, priceableTakeoff.length),
     },
+    tradeSummaries,
     pricingSchedule,
     materials,
     labour,
     exclusions,
     assumptions,
     rfisAndClarifications,
+    methodologies,
+    standards,
     documents: documents.map((doc) => ({
       fileName: doc.file_name,
       documentType: doc.document_type,

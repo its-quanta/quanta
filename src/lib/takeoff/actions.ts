@@ -38,8 +38,11 @@ export type CreateTakeoffItemInput = {
   sheet_number?: string | null;
   detail_reference?: string | null;
   specification_reference?: string | null;
+  confidence_score?: number | null;
+  ai_generated?: boolean;
   notes?: string | null;
   status?: TakeoffItemStatus;
+  reviewed?: boolean;
 };
 
 type DrawingReferenceInput = Pick<
@@ -209,8 +212,10 @@ function buildTakeoffInsertPayloads(
     quantity: input.quantity ?? 0,
     unit: input.unit?.trim() || "each",
     notes: input.notes?.trim() || null,
-    ai_generated: false,
-    reviewed,
+    confidence_score:
+      input.confidence_score === undefined ? null : input.confidence_score,
+    ai_generated: Boolean(input.ai_generated),
+    reviewed: input.reviewed ?? reviewed,
     status,
   };
 
