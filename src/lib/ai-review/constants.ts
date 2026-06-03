@@ -1,4 +1,8 @@
-import type { AiReviewItemStatus, AiReviewConfidenceLevel } from "@/src/types/database";
+import type {
+  AiReviewItem,
+  AiReviewItemStatus,
+  AiReviewConfidenceLevel,
+} from "@/src/types/database";
 
 export const AI_REVIEW_STATUSES: AiReviewItemStatus[] = [
   "pending",
@@ -65,6 +69,20 @@ export function isConfidenceAtLeast(
 ): boolean {
   const percent = confidenceToPercent(confidence);
   return percent !== null && percent >= thresholdPercent;
+}
+
+export function matchesConfidenceFilter(
+  item: AiReviewItem,
+  filter: "high" | "medium" | "low" | null
+): boolean {
+  if (!filter) {
+    return true;
+  }
+  const level = resolveConfidenceLevel(item.confidence);
+  if (filter === "high") {
+    return level === "high";
+  }
+  return filter === "medium" ? level === "medium" : level === "low";
 }
 
 export function formatConfidencePercent(confidence: number | null): string {

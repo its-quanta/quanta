@@ -7,7 +7,10 @@ import type { AiReviewItem } from "@/src/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export function isMissingColumnError(message: string): boolean {
-  return /column .+ does not exist/i.test(message);
+  return (
+    /column .+ does not exist/i.test(message) ||
+    /could not find .+ column .+ in the schema cache/i.test(message)
+  );
 }
 
 export async function fetchReviewItemById(
@@ -102,10 +105,12 @@ export async function markReviewItemAccepted(
     return { error: null };
   }
 
-  if (!/could not find the function|function .* does not exist/i.test(rpcError.message)) {
-    if (!isMissingColumnError(rpcError.message)) {
-      return { error: rpcError.message };
-    }
+  const rpcRecoverable =
+    /could not find the function|function .* does not exist/i.test(rpcError.message) ||
+    isMissingColumnError(rpcError.message);
+
+  if (!rpcRecoverable) {
+    return { error: rpcError.message };
   }
 
   return updateReviewItemWithFallback(supabase, itemId, organisationId, [

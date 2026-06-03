@@ -8,8 +8,15 @@ import { useAnalysisRunPolling } from "@/components/projects/use-analysis-run-po
 import { startDocumentAnalysisRunAction } from "@/src/lib/analysis-runs/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -24,9 +31,16 @@ import {
 import { ANALYSIS_ERRORS } from "@/src/lib/ai-review/document-analysis/messages";
 import {
   formatBytes,
-  parsePageRanges,
+  resolvePagePreset,
   TOO_MANY_PAGES_MESSAGE,
+  type PageSelectionPreset,
 } from "@/src/lib/ai-review/document-analysis/page-selection";
+import {
+  DRAWING_REGISTER_QUICK_FILTERS,
+  DRAWING_REGISTER_TYPE_LABELS,
+  matchesDrawingRegisterFilter,
+  type DrawingRegisterQuickFilter,
+} from "@/src/lib/documents/drawing-register/constants";
 import {
   getDocumentAnalysisMetadataAction,
   listDocumentsForAnalysisAction,
@@ -60,7 +74,16 @@ type DocumentAnalysisPanelProps = {
   documentPages: DocumentPage[];
 };
 
-type PageSelectionMode = "range" | "first_10" | "custom" | "selected_only";
+const ANALYSIS_QUICK_FILTER_TO_PRESET: Partial<
+  Record<DrawingRegisterQuickFilter, PageSelectionPreset>
+> = {
+  demolition: "demolition",
+  floor_plans: "floor_plans",
+  partitions: "partitions",
+  ceilings: "ceilings",
+  schedules: "schedules",
+  specifications: "specifications",
+};
 
 export function DocumentAnalysisPanel({
   projectId,
@@ -82,9 +105,9 @@ export function DocumentAnalysisPanel({
     null
   );
   const [metadataError, setMetadataError] = useState<string | null>(null);
-  const [pageRangeInput, setPageRangeInput] = useState("");
-  const [selectedPages, setSelectedPages] = useState<number[]>([]);
-  const [selectionMode, setSelectionMode] = useState<PageSelectionMode>("range");
+  const [selectedRegisterIds, setSelectedRegisterIds] = useState<string[]>([]);
+  const [registerFilter, setRegisterFilter] =
+    useState<DrawingRegisterQuickFilter>("all");
   const [formError, setFormError] = useState<string | null>(null);
 
   const loadCatalog = useCallback(() => {
@@ -114,8 +137,18 @@ export function DocumentAnalysisPanel({
 
   const pagesForDocument = useMemo(
     () =>
-      documentPages.filter((row) => row.document_id === selectedDocumentId),
+      documentPages
+        .filter((row) => row.document_id === selectedDocumentId)
+        .sort((a, b) => a.page_number - b.page_number),
     [documentPages, selectedDocumentId]
+  );
+
+  const filteredRegisterRows = useMemo(
+    () =>
+      pagesForDocument.filter((row) =>
+        matchesDrawingRegisterFilter(row.page_type, registerFilter)
+      ),
+    [pagesForDocument, registerFilter]
   );
 
   const isPdfSelected = selectedCatalogItem?.isPdf ?? false;
@@ -131,9 +164,7 @@ export function DocumentAnalysisPanel({
 
     return resolveSelectedPagesForAnalysis({
       body: {
-        selectedPages,
-        pageRangeInput: pageRangeInput.trim() || undefined,
-        preset: selectionMode === "first_10" ? "first_10" : undefined,
+        selectedDocumentPageIds: selectedRegisterIds,
       },
       isPdf: true,
       pageCount: metadata?.pageCount ?? null,
@@ -143,9 +174,7 @@ export function DocumentAnalysisPanel({
     });
   }, [
     isPdfSelected,
-    selectedPages,
-    pageRangeInput,
-    selectionMode,
+    selectedRegisterIds,
     metadata?.pageCount,
     metadata?.pageCountKnown,
     pagesForDocument,
@@ -169,17 +198,17 @@ export function DocumentAnalysisPanel({
     if (!totalPages || totalPages <= 0) {
       return 0;
     }
-    const count = selectedPages.length || 1;
+    const count = selectedRegisterIds.length || 1;
     const ratio = Math.min(1, count / totalPages);
     return Math.ceil(metadata.sizeBytes * ratio * 1.15);
-  }, [metadata, selectedPages.length, isPdfSelected]);
+  }, [metadata, selectedRegisterIds.length, isPdfSelected]);
 
   const loadMetadata = useCallback(
     (documentId: string) => {
       setMetadataError(null);
       setMetadata(null);
-      setSelectedPages([]);
-      setPageRangeInput("");
+      setSelectedRegisterIds([]);
+      setRegisterFilter("all");
       setFormError(null);
 
       if (!documentId) {
@@ -194,19 +223,6 @@ export function DocumentAnalysisPanel({
 
         if (result.metadata) {
           setMetadata(result.metadata);
-          if (
-            !result.metadata.isTooLargeForFullAnalysis &&
-            result.metadata.pageCountKnown &&
-            result.metadata.pageCount != null &&
-            result.metadata.pageCount <= MAX_ANALYSIS_BATCH_PAGES
-          ) {
-            setSelectedPages(
-              Array.from(
-                { length: result.metadata.pageCount },
-                (_, index) => index + 1
-              )
-            );
-          }
         }
 
         if (result.error && !result.metadata) {
@@ -224,51 +240,74 @@ export function DocumentAnalysisPanel({
     loadMetadata(documentId);
   }
 
-  function togglePage(pageNumber: number) {
-    setSelectionMode("custom");
-    setSelectedPages((current) => {
-      if (current.includes(pageNumber)) {
-        return current.filter((n) => n !== pageNumber);
+  function toggleRegisterEntry(entryId: string) {
+    setSelectedRegisterIds((current) => {
+      if (current.includes(entryId)) {
+        return current.filter((id) => id !== entryId);
       }
       if (current.length >= MAX_ANALYSIS_BATCH_PAGES) {
         setFormError(TOO_MANY_PAGES_MESSAGE);
         return current;
       }
       setFormError(null);
-      return [...current, pageNumber].sort((a, b) => a - b);
+      return [...current, entryId];
     });
+  }
+
+  function selectRegisterIds(ids: string[]) {
+    const unique = [...new Set(ids)].slice(0, MAX_ANALYSIS_BATCH_PAGES);
+    if (ids.length > MAX_ANALYSIS_BATCH_PAGES) {
+      setFormError(TOO_MANY_PAGES_MESSAGE);
+    } else {
+      setFormError(null);
+    }
+    setSelectedRegisterIds(unique);
   }
 
   function applyFirst10() {
-    if (!metadata?.pageCountKnown || !metadata.pageCount) {
-      setFormError("Enter a page range — total page count is not loaded yet.");
-      return;
-    }
-    setSelectionMode("first_10");
     setFormError(null);
-    const end = Math.min(metadata.pageCount, MAX_ANALYSIS_BATCH_PAGES);
-    setSelectedPages(Array.from({ length: end }, (_, i) => i + 1));
-    setPageRangeInput(
-      end === 1 ? "1" : `1-${end}`
+    selectRegisterIds(
+      pagesForDocument.slice(0, MAX_ANALYSIS_BATCH_PAGES).map((row) => row.id)
     );
   }
 
-  function applyPageRange() {
-    setSelectionMode("range");
-    const maxPage =
-      metadata?.pageCountKnown && metadata.pageCount
-        ? metadata.pageCount
-        : undefined;
-    const parsed = parsePageRanges(pageRangeInput, {
-      maxPage,
-      maxSelected: MAX_ANALYSIS_BATCH_PAGES,
-    });
-    if (parsed.error) {
-      setFormError(parsed.error);
+  function applyQuickFilter(filter: DrawingRegisterQuickFilter) {
+    setRegisterFilter(filter);
+    if (filter === "all") {
       return;
     }
+
+    const preset = ANALYSIS_QUICK_FILTER_TO_PRESET[filter];
+    if (!preset) {
+      return;
+    }
+
+    const pageCount =
+      metadata?.pageCountKnown && metadata.pageCount
+        ? metadata.pageCount
+        : pagesForDocument.length || MAX_ANALYSIS_BATCH_PAGES;
+
+    const pageNumbers = resolvePagePreset({
+      preset,
+      pageCount,
+      selectedPages: [],
+      documentPages: pagesForDocument,
+      documentId: selectedDocumentId,
+    });
+
+    const ids = pagesForDocument
+      .filter((row) => pageNumbers.includes(row.page_number))
+      .map((row) => row.id);
+
+    if (ids.length === 0) {
+      setFormError(
+        `No ${DRAWING_REGISTER_QUICK_FILTERS.find((item) => item.id === filter)?.label.toLowerCase() ?? "matching"} sheets in the register. Label sheets on the drawing register first.`
+      );
+      return;
+    }
+
     setFormError(null);
-    setSelectedPages(parsed.pages);
+    selectRegisterIds(ids);
   }
 
   function validateBeforeRun(): string | null {
@@ -311,19 +350,15 @@ export function DocumentAnalysisPanel({
     const resolved = resolvePagesForRun();
     const pagesToSend = resolved.pages;
 
-    if (isPdfSelected && pagesToSend.length > 0) {
-      setSelectedPages(pagesToSend);
-    }
-
     if (process.env.NODE_ENV === "development") {
       console.info("[document-analysis] run", {
         selectedDocumentId,
-        pageRangeInput,
+        selectedRegisterIds,
         parsedSelectedPages: pagesToSend,
         requestPayload: {
           projectId,
           documentId: selectedDocumentId,
-          selectedPages: pagesToSend,
+          selectedDocumentPageIds: selectedRegisterIds,
           tradeFocus,
           analysisMode,
         },
@@ -338,8 +373,7 @@ export function DocumentAnalysisPanel({
         tradeFocus,
         analysisMode,
         documentId: selectedDocumentId,
-        selectedPages: pagesToSend,
-        pageRangeInput: pageRangeInput.trim() || undefined,
+        selectedDocumentPageIds: selectedRegisterIds,
       })
     );
 
@@ -376,11 +410,6 @@ export function DocumentAnalysisPanel({
       );
     });
   }, [analysisRun.phase, projectId, router]);
-
-  const checkboxPageCount =
-    metadata?.pageCountKnown && metadata.pageCount
-      ? metadata.pageCount
-      : 0;
 
   return (
     <div className="flex flex-col gap-5">
@@ -584,7 +613,7 @@ export function DocumentAnalysisPanel({
           <div>
             <dt className="text-xs text-muted-foreground">Selected</dt>
             <dd className="mt-0.5 font-mono tabular-nums">
-              {selectedPages.length || "—"}
+              {selectedRegisterIds.length || "—"}
             </dd>
           </div>
           <div>
@@ -598,136 +627,131 @@ export function DocumentAnalysisPanel({
 
       {showPageTools ? (
         <div className="space-y-3 rounded-lg border border-border/80 p-3">
-          <p className="text-sm font-medium">Page selection</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium">Drawing selection</p>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-8 text-xs"
+              onClick={() =>
+                document
+                  .getElementById("drawing-register")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
+            >
+              Edit drawing register
+            </Button>
+          </div>
 
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               size="sm"
-              variant={selectionMode === "first_10" ? "default" : "outline"}
-              disabled={formDisabled}
+              variant="outline"
+              disabled={formDisabled || pagesForDocument.length === 0}
               onClick={applyFirst10}
             >
-              First {MAX_ANALYSIS_BATCH_PAGES} pages
+              First {MAX_ANALYSIS_BATCH_PAGES} sheets
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={selectionMode === "custom" ? "default" : "outline"}
-              disabled={formDisabled}
-              onClick={() => {
-                setSelectionMode("custom");
-                setFormError(null);
-              }}
-            >
-              Custom pages
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={
-                selectionMode === "selected_only" ? "default" : "outline"
-              }
-              disabled={formDisabled || selectedPages.length === 0}
-              onClick={() => {
-                setSelectionMode("selected_only");
-                setFormError(null);
-              }}
-            >
-              Analyse selected pages only
-            </Button>
+            {DRAWING_REGISTER_QUICK_FILTERS.filter(
+              (filter) => filter.id !== "all"
+            ).map((filter) => (
+              <Button
+                key={filter.id}
+                type="button"
+                size="sm"
+                variant={
+                  registerFilter === filter.id ? "default" : "outline"
+                }
+                disabled={formDisabled || pagesForDocument.length === 0}
+                onClick={() => applyQuickFilter(filter.id)}
+              >
+                {filter.label}
+              </Button>
+            ))}
           </div>
 
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="min-w-[12rem] flex-1 space-y-1">
-              <Label htmlFor="page-range">Page range</Label>
-              <Input
-                id="page-range"
-                placeholder="e.g. 1-5, 8, 12-14"
-                value={pageRangeInput}
-                disabled={formDisabled}
-                onChange={(event) => {
-                  setPageRangeInput(event.target.value);
-                  setSelectionMode("range");
-                }}
-              />
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              disabled={formDisabled}
-              onClick={applyPageRange}
-            >
-              Apply range
-            </Button>
-          </div>
-
-          {selectionMode === "custom" && checkboxPageCount > 0 ? (
-            <div className="max-h-48 overflow-y-auto rounded border border-border/60 p-2">
-              <div className="grid grid-cols-2 gap-1 sm:grid-cols-4 md:grid-cols-6">
-                {Array.from({ length: checkboxPageCount }, (_, index) => {
-                  const pageNumber = index + 1;
-                  const checked = selectedPages.includes(pageNumber);
-                  const row = pagesForDocument.find(
-                    (p) => p.page_number === pageNumber
-                  );
-                  return (
-                    <label
-                      key={pageNumber}
-                      className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-xs hover:bg-muted/60"
-                    >
-                      <input
-                        type="checkbox"
-                        className="size-3.5 rounded border"
-                        checked={checked}
-                        disabled={formDisabled}
-                        onChange={() => togglePage(pageNumber)}
-                      />
-                      <span className="font-mono tabular-nums">
-                        {pageNumber}
-                      </span>
-                      {row?.page_type ? (
-                        <span className="truncate text-muted-foreground">
-                          {row.page_type}
-                        </span>
-                      ) : null}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          ) : selectionMode === "custom" ? (
-            <p className="text-xs text-muted-foreground">
-              Page count is loading or unknown — use the range field above
-              (e.g. 1-5, 8, 12-14).
+          {pagesForDocument.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No drawing register for this PDF yet. Scroll to the drawing
+              register below and click &quot;Create register from PDF&quot;.
             </p>
-          ) : null}
+          ) : filteredRegisterRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No sheets match this filter. Adjust drawing types in the register.
+            </p>
+          ) : (
+            <div className="max-h-56 overflow-y-auto rounded border border-border/60">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10" />
+                    <TableHead>Sheet no</TableHead>
+                    <TableHead>Drawing name</TableHead>
+                    <TableHead>Page</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Revision</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredRegisterRows.map((row) => {
+                    const checked = selectedRegisterIds.includes(row.id);
+                    const label =
+                      row.sheet_number ||
+                      row.sheet_title ||
+                      `Page ${row.page_number}`;
+                    return (
+                      <TableRow key={row.id}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            className="size-3.5 rounded border"
+                            checked={checked}
+                            disabled={formDisabled}
+                            aria-label={`Select ${label}`}
+                            onChange={() => toggleRegisterEntry(row.id)}
+                          />
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {row.sheet_number || "—"}
+                        </TableCell>
+                        <TableCell className="max-w-[12rem] truncate text-xs">
+                          {row.sheet_title || "—"}
+                        </TableCell>
+                        <TableCell className="font-mono tabular-nums text-xs">
+                          {row.page_number}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {row.page_type
+                            ? DRAWING_REGISTER_TYPE_LABELS[row.page_type]
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {row.revision || "—"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
 
           {effectiveSelectedPages.length > 0 ? (
             <p className="text-sm text-foreground">
-              {effectiveSelectedPages.length === 1 ? (
-                <>
-                  Selected pages:{" "}
-                  <span className="font-mono tabular-nums">
-                    {effectiveSelectedPages[0]}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="font-mono tabular-nums">
-                    {effectiveSelectedPages.length} pages selected
-                  </span>
-                  {": "}
-                  <span className="font-mono tabular-nums text-muted-foreground">
-                    {effectiveSelectedPages.join(", ")}
-                  </span>
-                </>
-              )}
+              <span className="font-mono tabular-nums">
+                {effectiveSelectedPages.length} sheet
+                {effectiveSelectedPages.length === 1 ? "" : "s"} selected
+              </span>
+              {" · PDF pages "}
+              <span className="font-mono tabular-nums text-muted-foreground">
+                {effectiveSelectedPages.join(", ")}
+              </span>
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              No pages selected yet. Enter a range or use a quick option above.
+              Select drawings from the register above, or use a quick filter.
             </p>
           )}
         </div>

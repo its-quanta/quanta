@@ -5,9 +5,9 @@ import type { WorkspaceStepStatus } from "@/src/lib/projects/workspace-steps";
 import type { WorkspaceTabValue } from "@/src/lib/scope-gaps/types";
 
 const STEP_TAB: Record<string, WorkspaceTabValue> = {
-  upload: "plans-specs",
-  "ai-review": "ai-review",
-  "build-up": "build-up",
+  documents: "documents",
+  scope: "scope",
+  estimate: "estimate",
   commercial: "commercial",
   submit: "submission",
 };

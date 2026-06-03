@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRouter } from "next/navigation";
 import {
   flexRender,
@@ -115,6 +116,7 @@ type TakeoffTableProps = {
   projectStandardLinks: StandardLinkWithStandard[];
   onPriceManual?: (takeoffItemId: string) => void;
   showWorkflowFilter?: boolean;
+  virtualized?: boolean;
 };
 
 export function TakeoffTable({
@@ -129,6 +131,7 @@ export function TakeoffTable({
   projectStandardLinks,
   onPriceManual,
   showWorkflowFilter = false,
+  virtualized = false,
 }: TakeoffTableProps) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
@@ -715,6 +718,16 @@ export function TakeoffTable({
     getCoreRowModel: getCoreRowModel(),
   });
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const tableRows = table.getRowModel().rows;
+  const columnCount = table.getAllLeafColumns().length;
+  const rowVirtualizer = useVirtualizer({
+    count: tableRows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 76,
+    overscan: 12,
+  });
+
   function handleAddItem() {
     setActionError(null);
     setSuccessMessage(null);
@@ -746,14 +759,33 @@ export function TakeoffTable({
 
   const hasAnyItems = items.length > 0;
   const showFilteredEmpty = hasAnyItems && filteredItems.length === 0;
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const virtualPaddingTop =
+    virtualItems.length > 0 ? virtualItems[0]!.start : 0;
+  const virtualPaddingBottom =
+    virtualItems.length > 0
+      ? rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1]!.end
+      : 0;
 
-  return (
+  const body = (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+        <p
+          className={
+            virtualized
+              ? "text-base text-muted-foreground"
+              : "text-sm text-muted-foreground"
+          }
+        >
           Manual quantity lines — review each item before pricing.
         </p>
-        <Button type="button" onClick={handleAddItem} disabled={isPending}>
+        <Button
+          type="button"
+          size={virtualized ? "default" : "default"}
+          className={virtualized ? "h-10" : undefined}
+          onClick={handleAddItem}
+          disabled={isPending}
+        >
           <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
           Add item
         </Button>
@@ -805,6 +837,84 @@ export function TakeoffTable({
             No takeoff lines match your filters.
           </p>
         </div>
+      ) : virtualized ? (
+        <div
+          ref={scrollRef}
+          className="min-h-0 flex-1 overflow-auto rounded-lg ring-1 ring-border"
+        >
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id} className="hover:bg-muted/80">
+                  {headerGroup.headers.map((header) => (
+                    <TableHead
+                      key={header.id}
+                      scope="col"
+                      className={cn(
+                        "text-sm",
+                        header.column.id === "quantity" ||
+                          header.column.id === "page_number"
+                          ? "text-right"
+                          : undefined
+                      )}
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {virtualPaddingTop > 0 ? (
+                <TableRow aria-hidden>
+                  <TableCell
+                    colSpan={columnCount}
+                    className="border-0 p-0"
+                    style={{ height: virtualPaddingTop }}
+                  />
+                </TableRow>
+              ) : null}
+              {virtualItems.map((virtualRow) => {
+                const row = tableRows[virtualRow.index];
+                if (!row) {
+                  return null;
+                }
+                return (
+                  <TableRow
+                    key={row.id}
+                    className={cn(
+                      "align-top hover:bg-muted/20",
+                      selection.isSelected(row.original.id) && "bg-primary/5"
+                    )}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id} className="py-2.5 text-sm">
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                );
+              })}
+              {virtualPaddingBottom > 0 ? (
+                <TableRow aria-hidden>
+                  <TableCell
+                    colSpan={columnCount}
+                    className="border-0 p-0"
+                    style={{ height: virtualPaddingBottom }}
+                  />
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </div>
       ) : (
         <div className="overflow-x-auto rounded-lg ring-1 ring-border">
           <Table>
@@ -834,7 +944,7 @@ export function TakeoffTable({
               ))}
             </TableHeader>
             <TableBody>
-              {table.getRowModel().rows.map((row) => (
+              {tableRows.map((row) => (
                 <TableRow
                   key={row.id}
                   className={cn(
@@ -1136,4 +1246,12 @@ export function TakeoffTable({
       </Dialog>
     </>
   );
+
+  if (virtualized) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-3">{body}</div>
+    );
+  }
+
+  return body;
 }

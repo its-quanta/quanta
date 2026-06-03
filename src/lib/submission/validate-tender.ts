@@ -518,21 +518,21 @@ function actionForCheck(check: ValidationCheck): TenderValidationAction {
     case "doc-structural":
     case "doc-specification":
     case "doc-any":
-      return { id: "open-documents", label: "Upload documents", tab: "plans-specs" };
+      return { id: "open-documents", label: "Upload documents", tab: "documents" };
     case "doc-drawings-linked":
     case "takeoff-drawing-ref":
     case "takeoff-spec-ref":
     case "takeoff-exists":
     case "takeoff-quantities":
     case "takeoff-reviewed":
-      return { id: "open-takeoff", label: "Open takeoff", tab: "takeoff" };
+      return { id: "open-takeoff", label: "Open takeoff", tab: "scope" };
     case "package-missing":
     case "package-coverage":
     case "package-coverage-threshold":
       return {
         id: "apply-package",
         label: "Apply methodology",
-        tab: "takeoff",
+        tab: "scope",
       };
     case "pricing-coverage":
     case "pricing-unpriced":
@@ -544,13 +544,13 @@ function actionForCheck(check: ValidationCheck): TenderValidationAction {
       return {
         id: "review-materials",
         label: "Review materials",
-        tab: "build-up",
+        tab: "estimate",
       };
     case "labour-generated":
     case "labour-reviewed":
-      return { id: "review-labour", label: "Review labour", tab: "build-up" };
+      return { id: "review-labour", label: "Review labour", tab: "estimate" };
     case "standards-linked":
-      return { id: "add-standards", label: "Add standards", tab: "takeoff" };
+      return { id: "add-standards", label: "Add standards", tab: "scope" };
     case "submission-exclusions":
       return {
         id: "draft-exclusions",
@@ -573,7 +573,7 @@ function actionForCheck(check: ValidationCheck): TenderValidationAction {
         section: "rfis",
       };
     default:
-      return { id: "open-overview", label: "Review project", tab: "overview" };
+      return { id: "open-overview", label: "Review project", tab: "documents" };
   }
 }
 

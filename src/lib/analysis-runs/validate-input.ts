@@ -97,6 +97,7 @@ export async function validateAnalysisRunInput(
 
   const resolved = resolveSelectedPagesForAnalysis({
     body: {
+      selectedDocumentPageIds: input.selectedDocumentPageIds,
       selectedPages: selectedPagesFromInput,
       pageNumbers: input.pageNumbers,
       pageRangeInput: input.pageRangeInput,

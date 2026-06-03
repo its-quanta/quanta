@@ -216,18 +216,16 @@ export function GlobalCommandBar({
         } else if (command.id === "nav-imports") {
           router.push("/imports");
         } else if (workspace) {
-          if (command.id === "nav-takeoff") {
-            workspace.navigateTab("takeoff");
+          if (command.id === "nav-takeoff" || command.id === "nav-ai-review") {
+            workspace.navigateTab("scope");
           } else if (command.id === "nav-plans") {
-            workspace.navigateTab("plans-specs");
+            workspace.navigateTab("documents");
           } else if (command.id === "nav-scope") {
-            workspace.navigateTab("build-up");
+            workspace.navigateTab("estimate");
           } else if (command.id === "nav-commercial") {
             workspace.navigateTab("commercial");
           } else if (command.id === "nav-submission") {
             workspace.navigateTab("submission");
-          } else if (command.id === "nav-ai-review") {
-            workspace.navigateTab("ai-review");
           }
         }
         close();
@@ -244,7 +242,7 @@ export function GlobalCommandBar({
         } else if (workspace?.projectId) {
           workspace.navigateTab("submission");
           if (command.id === "create-takeoff") {
-            workspace.navigateTab("takeoff");
+            workspace.navigateTab("scope");
             workspace.onFocusTakeoffSearch?.();
           }
         }
@@ -255,7 +253,7 @@ export function GlobalCommandBar({
       if (command.id.startsWith("ctx-") && workspace) {
         if (command.id === "ctx-apply-package") {
           workspace.onApplyPackage?.();
-          workspace.navigateTab("takeoff");
+          workspace.navigateTab("scope");
         } else if (
           (command.id === "ctx-open-source" ||
             command.id === "ctx-relationships") &&
@@ -267,9 +265,9 @@ export function GlobalCommandBar({
             })
           );
         } else if (command.id === "ctx-materials") {
-          workspace.navigateTab("build-up");
+          workspace.navigateTab("estimate");
         } else if (command.id === "ctx-labour") {
-          workspace.navigateTab("build-up");
+          workspace.navigateTab("estimate");
         } else if (command.id === "ctx-pricing" && workspace.takeoffItem) {
           workspace.navigateTab("commercial", {
             priceTakeoff: workspace.takeoffItem.id,
@@ -282,7 +280,7 @@ export function GlobalCommandBar({
       if (command.action === "apply" && entry?.kind === "package" && entry.href) {
         if (workspace?.onApplyPackage) {
           workspace.onApplyPackage();
-          workspace.navigateTab("takeoff");
+          workspace.navigateTab("scope");
         } else if (entry.href) {
           router.push(entry.href);
         }

@@ -41,7 +41,7 @@ export function BuildUpPanel(props: BuildUpPanelProps) {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-lg font-medium">Build up</h2>
+        <h2 className="text-lg font-medium">Estimate</h2>
         <p className="text-sm text-muted-foreground">
           Review packages, generated materials, and labour before commercial
           pricing and submission.

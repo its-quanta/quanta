@@ -16,6 +16,8 @@ import {
   insertDocumentWithFallback,
   queryDocumentById,
 } from "@/src/lib/documents/document-schema";
+import { seedDrawingRegisterAfterUpload } from "@/src/lib/documents/drawing-register/actions";
+import { isPdfMimeType } from "@/src/lib/ai-review/document-analysis/pdf";
 import type {
   DocumentClassification,
   OrganisationProfile,
@@ -199,9 +201,21 @@ export async function createDocumentRecordAction(
     return { error: insertError };
   }
 
+  const resolvedDocumentId = savedDocumentId ?? documentId;
+
+  if (isPdfMimeType(fileType)) {
+    await seedDrawingRegisterAfterUpload(
+      projectId,
+      resolvedDocumentId,
+      profile.organisation_id,
+      storagePath,
+      fileType
+    );
+  }
+
   revalidatePath(`/projects/${projectId}`);
 
-  return { documentId: savedDocumentId ?? documentId };
+  return { documentId: resolvedDocumentId };
 }
 
 export async function deleteDocumentAction(

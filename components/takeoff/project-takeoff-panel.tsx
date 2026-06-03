@@ -31,6 +31,8 @@ type ProjectTakeoffPanelProps = {
   onPriceManual?: (takeoffItemId: string) => void;
   showWorkflowFilter?: boolean;
   compact?: boolean;
+  virtualized?: boolean;
+  embedded?: boolean;
 };
 
 export function ProjectTakeoffPanel({
@@ -46,7 +48,32 @@ export function ProjectTakeoffPanel({
   onPriceManual,
   showWorkflowFilter = false,
   compact = false,
+  virtualized = false,
+  embedded = false,
 }: ProjectTakeoffPanelProps) {
+  const table = (
+    <TakeoffTable
+      projectId={projectId}
+      items={items}
+      documents={documents}
+      documentPages={documentPages}
+      assemblyPackages={assemblyPackages}
+      takeoffAssemblies={takeoffAssemblies}
+      pricingItems={pricingItems}
+      organisationStandards={organisationStandards}
+      projectStandardLinks={projectStandardLinks}
+      onPriceManual={onPriceManual}
+      showWorkflowFilter={showWorkflowFilter}
+      virtualized={virtualized}
+    />
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">{table}</div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {!compact ? <TakeoffSummary items={items} /> : null}
@@ -59,21 +86,7 @@ export function ProjectTakeoffPanel({
             line before pricing.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <TakeoffTable
-            projectId={projectId}
-            items={items}
-            documents={documents}
-            documentPages={documentPages}
-            assemblyPackages={assemblyPackages}
-            takeoffAssemblies={takeoffAssemblies}
-            pricingItems={pricingItems}
-            organisationStandards={organisationStandards}
-            projectStandardLinks={projectStandardLinks}
-            onPriceManual={onPriceManual}
-            showWorkflowFilter={showWorkflowFilter}
-          />
-        </CardContent>
+        <CardContent>{table}</CardContent>
       </Card>
     </div>
   );

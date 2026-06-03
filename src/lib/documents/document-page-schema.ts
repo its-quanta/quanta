@@ -4,7 +4,7 @@ import { isMissingColumnError } from "@/src/lib/auth/profile-schema";
 import type { DocumentPage } from "@/src/types/database";
 
 export const DOCUMENT_PAGE_SELECT =
-  "id, organisation_id, project_id, document_id, page_number, sheet_number, sheet_title, page_label, page_type, include_in_analysis, analysis_status, created_at, updated_at" as const;
+  "id, organisation_id, project_id, document_id, page_number, sheet_number, sheet_title, revision, page_label, page_type, include_in_analysis, analysis_status, created_at, updated_at" as const;
 
 export const DOCUMENT_PAGE_SELECT_LEGACY =
   "id, organisation_id, document_id, page_number, sheet_number, sheet_title, created_at, updated_at" as const;
@@ -17,6 +17,7 @@ export type DocumentPageRow = {
   page_number: number;
   sheet_number: string | null;
   sheet_title: string | null;
+  revision?: string | null;
   page_label?: string | null;
   page_type?: string | null;
   include_in_analysis?: boolean | null;
@@ -34,6 +35,7 @@ export function normalizeDocumentPage(row: DocumentPageRow): DocumentPage {
     page_number: Number(row.page_number),
     sheet_number: row.sheet_number ?? null,
     sheet_title: row.sheet_title ?? null,
+    revision: row.revision ?? null,
     page_label: row.page_label ?? null,
     page_type: (row.page_type as DocumentPage["page_type"]) ?? null,
     include_in_analysis: row.include_in_analysis ?? true,

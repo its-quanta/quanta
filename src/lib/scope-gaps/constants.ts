@@ -10,10 +10,10 @@ export const SCOPE_GAP_LABELS: Record<ScopeGapKind, string> = {
 };
 
 export const SCOPE_GAP_FIX_TAB: Record<ScopeGapKind, WorkspaceTabValue | null> = {
-  missing_package: "takeoff",
+  missing_package: "scope",
   missing_pricing: "commercial",
-  missing_material_generation: "build-up",
-  missing_labour_generation: "build-up",
-  missing_drawing_reference: "takeoff",
-  missing_standards_reference: "takeoff",
+  missing_material_generation: "estimate",
+  missing_labour_generation: "estimate",
+  missing_drawing_reference: "scope",
+  missing_standards_reference: "scope",
 };

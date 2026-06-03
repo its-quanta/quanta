@@ -5,9 +5,7 @@ import { useMemo, useState } from "react";
 import { AiReviewApprovalQueue } from "@/components/ai-review/ai-review-approval-queue";
 import { AiReviewDocumentViewer } from "@/components/ai-review/ai-review-document-viewer";
 import { AiReviewEvidenceDrawer } from "@/components/ai-review/ai-review-evidence-drawer";
-import {
-  AiReviewModeBar,
-} from "@/components/ai-review/ai-review-mode-bar";
+import { Button } from "@/components/ui/button";
 import { useOrganisationCurrency } from "@/components/layout/organisation-settings-provider";
 import { tradeColour } from "@/src/lib/ai-review/overlay";
 import { computeAiReviewModeMetrics } from "@/src/lib/ai-review/review-metrics";
@@ -91,13 +89,34 @@ export function AiReviewCanvas({
 
   return (
     <div className="flex flex-col gap-3">
-      <AiReviewModeBar
-        projectId={projectId}
-        items={items}
-        metrics={metrics}
-        activeConfidenceFilter={confidenceFilter}
-        onFocusConfidence={setConfidenceFilter}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card p-3">
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <span>{metrics.pending} pending</span>
+          <span>{metrics.approved} accepted</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              setConfidenceFilter(confidenceFilter === "medium" ? null : "medium")
+            }
+          >
+            Review medium
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              setConfidenceFilter(confidenceFilter === "low" ? null : "low")
+            }
+          >
+            Review low
+          </Button>
+        </div>
+      </div>
 
       <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
         {TRADE_LEGEND.map((trade) => (

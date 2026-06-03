@@ -385,7 +385,7 @@ export function ScopeReviewPanel({
                               type="button"
                               variant="outline"
                               size="sm"
-                              onClick={() => onNavigateTab("takeoff")}
+                              onClick={() => onNavigateTab("scope")}
                             >
                               Link standard
                             </Button>
@@ -428,7 +428,7 @@ export function ScopeReviewPanel({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => onNavigateTab("takeoff")}
+          onClick={() => onNavigateTab("scope")}
         >
           Open takeoff workspace
         </Button>

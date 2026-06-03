@@ -11,7 +11,10 @@ export type PageSelectionPreset =
   | "first_10"
   | "selected_only"
   | "custom"
+  | "demolition"
   | "floor_plans"
+  | "partitions"
+  | "ceilings"
   | "schedules"
   | "specifications";
 
@@ -61,7 +64,10 @@ export function resolvePagePreset(input: {
     Exclude<PageSelectionPreset, "first_10" | "selected_only" | "custom">,
     DocumentPageType
   > = {
+    demolition: "demolition",
     floor_plans: "floor_plan",
+    partitions: "partition",
+    ceilings: "ceiling",
     schedules: "schedule",
     specifications: "specification",
   };
@@ -82,7 +88,10 @@ export function resolvePagePreset(input: {
 
   // Manual tagging fallback: match sheet title / label keywords.
   const keywords: Record<DocumentPageType, string[]> = {
+    demolition: ["demolition", "demo", "strip out", "strip-out"],
     floor_plan: ["floor", "plan", "layout", "ga"],
+    partition: ["partition", "wall", "stud"],
+    ceiling: ["ceiling", "grid", "suspended"],
     schedule: ["schedule", "door", "finish"],
     specification: ["spec", "specification", "nbs"],
     other: [],

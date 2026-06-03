@@ -137,9 +137,12 @@ export type Document = {
   created_at: string;
 };
 
-/** Indexed page/sheet within an uploaded document (for structured takeoff links). */
+/** Indexed page/sheet within an uploaded document (drawing register). */
 export type DocumentPageType =
+  | "demolition"
   | "floor_plan"
+  | "partition"
+  | "ceiling"
   | "schedule"
   | "specification"
   | "other";
@@ -152,6 +155,7 @@ export type DocumentPage = {
   page_number: number;
   sheet_number: string | null;
   sheet_title: string | null;
+  revision?: string | null;
   page_label?: string | null;
   page_type?: DocumentPageType | null;
   include_in_analysis?: boolean;

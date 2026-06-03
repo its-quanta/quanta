@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 
 import { AiReviewOverlayLayer } from "@/components/ai-review/ai-review-overlay-layer";
 import { DocumentPreviewContent } from "@/components/documents/document-preview-content";
@@ -29,9 +29,13 @@ type AiReviewDocumentViewerProps = {
   selectedItemId: string | null;
   showOverlayLayer: boolean;
   onToggleOverlay: (show: boolean) => void;
+  /** When set, document/page follow these props instead of selectedItemId. */
+  syncDocumentId?: string | null;
+  syncPage?: number | null;
+  drawingReferenceLabel?: string | null;
 };
 
-export function AiReviewDocumentViewer({
+function AiReviewDocumentViewerInner({
   projectId,
   items,
   documents,
@@ -39,10 +43,18 @@ export function AiReviewDocumentViewer({
   selectedItemId,
   showOverlayLayer,
   onToggleOverlay,
+  syncDocumentId,
+  syncPage,
+  drawingReferenceLabel,
 }: AiReviewDocumentViewerProps) {
+  const usesExternalNavigation = syncDocumentId !== undefined;
+
   const selectedItem = useMemo(
-    () => items.find((item) => item.id === selectedItemId) ?? null,
-    [items, selectedItemId]
+    () =>
+      usesExternalNavigation
+        ? null
+        : items.find((item) => item.id === selectedItemId) ?? null,
+    [items, selectedItemId, usesExternalNavigation]
   );
 
   const drawingContext = useMemo(
@@ -59,29 +71,49 @@ export function AiReviewDocumentViewer({
   );
 
   const [documentId, setDocumentId] = useState<string | null>(
-    selectedItem?.source_document_id ?? drawingDocuments[0]?.id ?? null
+    syncDocumentId ??
+      selectedItem?.source_document_id ??
+      drawingDocuments[0]?.id ??
+      null
   );
   const [compareDocumentId, setCompareDocumentId] = useState<string | null>(null);
   const [compareEnabled, setCompareEnabled] = useState(false);
   const [activePage, setActivePage] = useState<number | null>(
-    selectedItem?.page_number ?? null
+    syncPage ?? selectedItem?.page_number ?? null
   );
   const [zoom, setZoom] = useState<(typeof ZOOM_LEVELS)[number]>(100);
 
-  const activeDocumentId =
-    selectedItem?.source_document_id ?? documentId ?? drawingDocuments[0]?.id ?? null;
+  const activeDocumentId = usesExternalNavigation
+    ? syncDocumentId ?? documentId ?? drawingDocuments[0]?.id ?? null
+    : selectedItem?.source_document_id ?? documentId ?? drawingDocuments[0]?.id ?? null;
 
   const activeDocument = documents.find((doc) => doc.id === activeDocumentId);
   const compareDocument = documents.find((doc) => doc.id === compareDocumentId);
 
   useEffect(() => {
+    if (usesExternalNavigation) {
+      if (syncDocumentId != null) {
+        setDocumentId(syncDocumentId);
+      }
+      if (syncPage != null) {
+        setActivePage(syncPage);
+      }
+      return;
+    }
     if (selectedItem?.source_document_id) {
       setDocumentId(selectedItem.source_document_id);
     }
     if (selectedItem?.page_number != null) {
       setActivePage(selectedItem.page_number);
     }
-  }, [selectedItem?.id, selectedItem?.source_document_id, selectedItem?.page_number]);
+  }, [
+    usesExternalNavigation,
+    syncDocumentId,
+    syncPage,
+    selectedItem?.id,
+    selectedItem?.source_document_id,
+    selectedItem?.page_number,
+  ]);
 
   const pagesForDocument = useMemo(() => {
     if (!activeDocumentId) {
@@ -321,11 +353,36 @@ export function AiReviewDocumentViewer({
           {drawingContext.documentNames.get(activeDocument.id) ??
             activeDocument.file_name}
           {activePage != null ? ` · Page ${activePage}` : ""}
-          {selectedItem?.drawing_reference
-            ? ` · Ref ${selectedItem.drawing_reference}`
-            : ""}
+          {drawingReferenceLabel
+            ? ` · Ref ${drawingReferenceLabel}`
+            : selectedItem?.drawing_reference
+              ? ` · Ref ${selectedItem.drawing_reference}`
+              : ""}
         </p>
       ) : null}
     </div>
   );
 }
+
+function viewerPropsAreEqual(
+  prev: AiReviewDocumentViewerProps,
+  next: AiReviewDocumentViewerProps
+): boolean {
+  return (
+    prev.projectId === next.projectId &&
+    prev.documents === next.documents &&
+    prev.documentPages === next.documentPages &&
+    prev.showOverlayLayer === next.showOverlayLayer &&
+    prev.onToggleOverlay === next.onToggleOverlay &&
+    prev.syncDocumentId === next.syncDocumentId &&
+    prev.syncPage === next.syncPage &&
+    prev.drawingReferenceLabel === next.drawingReferenceLabel &&
+    (prev.syncDocumentId !== undefined ||
+      (prev.selectedItemId === next.selectedItemId && prev.items === next.items))
+  );
+}
+
+export const AiReviewDocumentViewer = memo(
+  AiReviewDocumentViewerInner,
+  viewerPropsAreEqual
+);

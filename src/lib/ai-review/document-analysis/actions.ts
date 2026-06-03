@@ -72,6 +72,8 @@ export type AnalyseProjectDocumentsInput = {
   tradeFocus: AiReviewTradeFocus;
   analysisMode?: DocumentAnalysisMode;
   documentId: string;
+  /** Drawing register entry IDs (preferred over raw page numbers). */
+  selectedDocumentPageIds?: string[];
   /** Selected 1-based page numbers (camelCase). */
   selectedPages?: number[];
   /** Selected 1-based page numbers (snake_case). */
@@ -396,6 +398,7 @@ export async function analyseProjectDocumentsBatchAction(
 
   const resolved = resolveSelectedPagesForAnalysis({
     body: {
+      selectedDocumentPageIds: input.selectedDocumentPageIds,
       selectedPages: selectedPagesFromInput,
       pageNumbers: input.pageNumbers,
       pageRangeInput: input.pageRangeInput,

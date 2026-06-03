@@ -228,11 +228,11 @@ export function TakeoffRelationshipsProvider({
         }}
         onOpenMaterials={() => {
           setActiveItem(null);
-          onNavigateTab("build-up");
+          onNavigateTab("estimate");
         }}
         onOpenLabour={() => {
           setActiveItem(null);
-          onNavigateTab("build-up");
+          onNavigateTab("estimate");
         }}
         onOpenStandards={() => {
           setActiveItem(null);

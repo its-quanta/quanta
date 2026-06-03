@@ -10,13 +10,19 @@ export const SUPPORTED_ANALYSIS_MIME_TYPES = [
 ] as const;
 
 export type DocumentPageType =
+  | "demolition"
   | "floor_plan"
+  | "partition"
+  | "ceiling"
   | "schedule"
   | "specification"
   | "other";
 
 export const DOCUMENT_PAGE_TYPE_LABELS: Record<DocumentPageType, string> = {
+  demolition: "Demolition",
   floor_plan: "Floor plan",
+  partition: "Partition",
+  ceiling: "Ceiling",
   schedule: "Schedule",
   specification: "Specification",
   other: "Other",

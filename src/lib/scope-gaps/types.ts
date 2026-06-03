@@ -6,12 +6,11 @@ export type ScopeGapKind =
   | "missing_drawing_reference"
   | "missing_standards_reference";
 
+/** Active project workspace tabs (5-stage workflow). */
 export type WorkspaceTabValue =
-  | "overview"
-  | "plans-specs"
-  | "ai-review"
-  | "takeoff"
-  | "build-up"
+  | "documents"
+  | "scope"
+  | "estimate"
   | "commercial"
   | "submission";
 

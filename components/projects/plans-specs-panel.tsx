@@ -139,7 +139,11 @@ export function PlansSpecsPanel({
         ))}
       </div>
 
-      <ProjectDocumentsPanel projectId={projectId} documents={documents} />
+      <ProjectDocumentsPanel
+        projectId={projectId}
+        documents={documents}
+        documentPages={documentPages}
+      />
     </div>
   );
 }

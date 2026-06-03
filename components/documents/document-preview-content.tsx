@@ -78,8 +78,7 @@ export function DocumentPreviewContent({
       <div className="flex flex-col gap-2">
         {pageNumberHint !== null && pageNumberHint !== undefined ? (
           <p className="text-xs text-muted-foreground">
-            Linked page: {pageNumberHint}. Page navigation in the viewer is not
-            available yet.
+            Linked to page {pageNumberHint}.
           </p>
         ) : null}
         <iframe

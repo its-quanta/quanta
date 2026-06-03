@@ -3,9 +3,9 @@ import type { AiReviewItem } from "@/src/types/database";
 import type { ProjectReadinessMetrics } from "@/src/lib/projects/readiness";
 
 export type WorkspaceStepId =
-  | "upload"
-  | "ai-review"
-  | "build-up"
+  | "documents"
+  | "scope"
+  | "estimate"
   | "commercial"
   | "submit";
 
@@ -92,8 +92,8 @@ export function computeWorkspaceSteps(input: {
 
   return [
     {
-      id: "upload",
-      label: "Upload",
+      id: "documents",
+      label: "Documents",
       detail:
         documentsCount === 0
           ? "No documents"
@@ -107,8 +107,8 @@ export function computeWorkspaceSteps(input: {
       issueCount: documentsCount === 0 ? 1 : 0,
     },
     {
-      id: "ai-review",
-      label: "AI Review",
+      id: "scope",
+      label: "Scope",
       detail:
         aiTotal === 0
           ? "No suggestions"
@@ -122,8 +122,8 @@ export function computeWorkspaceSteps(input: {
       issueCount: aiTotal === 0 ? null : aiPending,
     },
     {
-      id: "build-up",
-      label: "Build Up",
+      id: "estimate",
+      label: "Estimate",
       detail: formatPercent(buildUpPercent),
       progressPercent: buildUpPercent,
       status: resolveStatus({
@@ -154,7 +154,7 @@ export function computeWorkspaceSteps(input: {
     },
     {
       id: "submit",
-      label: "Submit",
+      label: "Submission",
       detail: submissionReady ? "Ready" : "In progress",
       progressPercent: submissionReady ? 100 : null,
       status: resolveStatus({

@@ -25,10 +25,25 @@ export function normalizeSelectedPageNumbers(
 export type ResolveSelectedPagesInput = {
   selectedPages?: number[];
   selected_pages?: number[];
+  selectedDocumentPageIds?: string[];
   pageNumbers?: number[];
   pageRangeInput?: string;
   preset?: PageSelectionPreset;
 };
+
+function resolvePagesFromRegisterIds(
+  documentPageIds: string[],
+  documentPages: DocumentPage[],
+  documentId: string
+): number[] {
+  const idSet = new Set(documentPageIds);
+  return documentPages
+    .filter(
+      (row) => row.document_id === documentId && idSet.has(row.id)
+    )
+    .map((row) => row.page_number)
+    .sort((a, b) => a - b);
+}
 
 export function resolveSelectedPagesForAnalysis(input: {
   body: ResolveSelectedPagesInput;
@@ -46,6 +61,19 @@ export function resolveSelectedPagesForAnalysis(input: {
     input.pageCountKnown && input.pageCount != null && input.pageCount > 0
       ? input.pageCount
       : undefined;
+
+  const fromRegister = resolvePagesFromRegisterIds(
+    input.body.selectedDocumentPageIds ?? [],
+    input.documentPages,
+    input.documentId
+  );
+
+  if (fromRegister.length > 0) {
+    if (fromRegister.length > MAX_ANALYSIS_BATCH_PAGES) {
+      return { pages: [], error: ANALYSIS_ERRORS.tooManyPages };
+    }
+    return { pages: fromRegister };
+  }
 
   const fromBody = normalizeSelectedPageNumbers(
     input.body.selectedPages,
@@ -90,6 +118,6 @@ export function resolveSelectedPagesForAnalysis(input: {
   return {
     pages: [],
     error:
-      "No pages selected. Choose one or more pages or enter a page range.",
+      "No drawings selected. Choose sheets from the drawing register or apply a quick filter.",
   };
 }

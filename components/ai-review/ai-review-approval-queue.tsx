@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { AiReviewAdjustDialog } from "@/components/ai-review/ai-review-adjust-dialog";
 import { AiReviewConfidenceBadge } from "@/components/ai-review/ai-review-confidence-badge";
-import {
-  matchesConfidenceFilter,
-} from "@/components/ai-review/ai-review-mode-bar";
+import { matchesConfidenceFilter } from "@/src/lib/ai-review/constants";
 import { AiReviewSourceDialog } from "@/components/ai-review/ai-review-source-dialog";
 import { AiReviewStatusBadge } from "@/components/ai-review/ai-review-status-badge";
 import { Button } from "@/components/ui/button";

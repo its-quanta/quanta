@@ -1,25 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { useGlobalCommand } from "@/components/command-palette/global-command-provider";
 import { TakeoffRelationshipsProvider } from "@/components/takeoff/takeoff-relationships-context";
 import { buildProjectCommandIndex } from "@/src/lib/command/build-project-index";
-import { AiReviewPanel } from "@/components/projects/ai-review-panel";
 import { BuildUpPanel } from "@/components/projects/build-up-panel";
 import { CommercialReviewPanel } from "@/components/projects/commercial-review-panel";
-import { PlansSpecsPanel } from "@/components/projects/plans-specs-panel";
-import { ProjectOverviewPanel } from "@/components/projects/project-overview-panel";
+import { DocumentsWorkspacePanel } from "@/components/projects/documents-workspace-panel";
+import { ProjectWorkspaceHeader } from "@/components/projects/project-workspace-header";
+import { AiReviewPanel } from "@/components/projects/ai-review-panel";
 import { ProjectWorkflowProgressBar } from "@/components/projects/project-workflow-progress-bar";
 import { SubmissionPanel } from "@/components/projects/submission-panel";
-import { TakeoffTabPanel } from "@/components/projects/takeoff-tab-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { computeProjectReadiness } from "@/src/lib/projects/readiness";
 import { computeWorkspaceSteps } from "@/src/lib/projects/workspace-steps";
 import {
   isWorkspaceTab,
   resolveWorkspaceTab,
+  WORKSPACE_TAB_DEFAULT,
 } from "@/src/lib/projects/tab-routing";
 import type { PricingItemWithTakeoff } from "@/src/lib/pricing/queries";
 import type { ScopeGapSummary, WorkspaceTabValue } from "@/src/lib/scope-gaps/types";
@@ -42,14 +42,12 @@ import type {
 } from "@/src/types/database";
 
 const workspaceTabs = [
-  { value: "overview", label: "Overview" },
-  { value: "plans-specs", label: "Plans & Specs" },
-  { value: "ai-review", label: "AI Review" },
-  { value: "takeoff", label: "Takeoff" },
-  { value: "build-up", label: "Build Up" },
+  { value: "documents", label: "Documents" },
+  { value: "scope", label: "Scope" },
+  { value: "estimate", label: "Estimate" },
   { value: "commercial", label: "Commercial" },
   { value: "submission", label: "Submission" },
-] as const;
+] as const satisfies ReadonlyArray<{ value: WorkspaceTabValue; label: string }>;
 
 type ProjectWorkspaceTabsProps = {
   project: Project;
@@ -98,10 +96,10 @@ export function ProjectWorkspaceTabs({
   const tabParam = searchParams.get("tab");
   const priceTakeoffParam = searchParams.get("priceTakeoff");
 
-  const [activeTab, setActiveTab] = useState<WorkspaceTabValue>(() =>
-    resolveWorkspaceTab(tabParam)
-  );
-  const [pricingTakeoffId, setPricingTakeoffId] = useState<string | null>(null);
+  const activeTab: WorkspaceTabValue = priceTakeoffParam
+    ? "commercial"
+    : resolveWorkspaceTab(tabParam);
+  const pricingTakeoffId = priceTakeoffParam;
 
   const readiness = useMemo(
     () =>
@@ -142,23 +140,12 @@ export function ProjectWorkspaceTabs({
     [documents.length, aiReviewItems, readiness, scopeGapSummary.byKind, scopeGapSummary.totalGaps]
   );
 
-  useEffect(() => {
-    setActiveTab(resolveWorkspaceTab(tabParam));
-  }, [tabParam]);
-
-  useEffect(() => {
-    if (priceTakeoffParam) {
-      setActiveTab("commercial");
-      setPricingTakeoffId(priceTakeoffParam);
-    }
-  }, [priceTakeoffParam]);
-
   const navigateTab = useCallback(
-    (tab: WorkspaceTabValue, options?: { priceTakeoff?: string }) => {
-      setActiveTab(tab);
+    (tab: string, options?: { priceTakeoff?: string }) => {
+      const resolved = resolveWorkspaceTab(tab);
       const params = new URLSearchParams();
-      if (tab !== "overview") {
-        params.set("tab", tab);
+      if (resolved !== WORKSPACE_TAB_DEFAULT) {
+        params.set("tab", resolved);
       }
       if (options?.priceTakeoff) {
         params.set("priceTakeoff", options.priceTakeoff);
@@ -172,32 +159,11 @@ export function ProjectWorkspaceTabs({
     [project.id, router]
   );
 
-  function handleScopeGapNavigate(tab: string, takeoffId?: string) {
-    if (!isWorkspaceTab(tab)) {
-      const resolved = resolveWorkspaceTab(tab);
-      if (takeoffId && resolved === "commercial") {
-        navigateTab(resolved, { priceTakeoff: takeoffId });
-        return;
-      }
-      navigateTab(resolved);
-      return;
-    }
-
-    if (tab === "commercial" && takeoffId) {
-      navigateTab(tab, { priceTakeoff: takeoffId });
-      return;
-    }
-
-    navigateTab(tab);
-  }
-
   function handlePriceManual(takeoffItemId: string) {
-    setPricingTakeoffId(takeoffItemId);
     navigateTab("commercial", { priceTakeoff: takeoffItemId });
   }
 
   function clearPricingTakeoffParam() {
-    setPricingTakeoffId(null);
     navigateTab("commercial");
   }
 
@@ -231,9 +197,7 @@ export function ProjectWorkspaceTabs({
       projectName: project.name,
       projectEntries: projectCommandEntries,
       navigateTab: (tab, options) => {
-        if (isWorkspaceTab(tab)) {
-          navigateTab(tab, options);
-        }
+        navigateTab(tab, options);
       },
       onApplyPackage: () => {
         window.dispatchEvent(new CustomEvent("quanta:bulk-apply-package"));
@@ -260,7 +224,7 @@ export function ProjectWorkspaceTabs({
     [aiReviewItems]
   );
 
-  const isReviewTab = activeTab === "ai-review";
+  const isScopeTab = activeTab === "scope";
 
   return (
     <>
@@ -288,6 +252,8 @@ export function ProjectWorkspaceTabs({
           }}
           className="gap-4"
         >
+          <ProjectWorkspaceHeader project={project} />
+
           <ProjectWorkflowProgressBar
             steps={workflowSteps}
             activeTab={activeTab}
@@ -301,38 +267,30 @@ export function ProjectWorkspaceTabs({
             {workspaceTabs.map((tab) => (
               <TabsTrigger key={tab.value} value={tab.value}>
                 {tab.label}
-                {tab.value === "ai-review" && aiReviewPendingCount > 0
+                {tab.value === "scope" && aiReviewPendingCount > 0
                   ? ` (${aiReviewPendingCount})`
                   : ""}
               </TabsTrigger>
             ))}
           </TabsList>
 
-          <TabsContent value="overview">
-            <ProjectOverviewPanel
-              project={project}
-              readiness={readiness}
-              scopeGapSummary={scopeGapSummary}
-              workflowSteps={workflowSteps}
-              onNavigateTab={(tab, takeoffId) => {
-                if (takeoffId && tab === "commercial") {
-                  navigateTab(tab, { priceTakeoff: takeoffId });
-                  return;
-                }
-                navigateTab(tab);
-              }}
-            />
-          </TabsContent>
-
-          <TabsContent value="plans-specs">
-            <PlansSpecsPanel
+          <TabsContent value="documents">
+            <DocumentsWorkspacePanel
               projectId={project.id}
               documents={documents}
               documentPages={documentPages}
+              onOpenScope={() => navigateTab("scope")}
             />
           </TabsContent>
 
-          <TabsContent value="ai-review" className={isReviewTab ? "mt-0" : undefined}>
+          <TabsContent
+            value="scope"
+            className={
+              isScopeTab
+                ? "mt-0 h-[calc(100vh-12.5rem)] min-h-0 overflow-hidden data-[state=inactive]:hidden"
+                : undefined
+            }
+          >
             <AiReviewPanel
               projectId={project.id}
               items={aiReviewItems}
@@ -347,22 +305,7 @@ export function ProjectWorkspaceTabs({
             />
           </TabsContent>
 
-          <TabsContent value="takeoff">
-            <TakeoffTabPanel
-              projectId={project.id}
-              documents={documents}
-              documentPages={documentPages}
-              takeoffItems={takeoffItems}
-              assemblyPackages={assemblyPackages}
-              takeoffAssemblies={takeoffAssemblies}
-              pricingItems={pricingItemsPlain}
-              organisationStandards={organisationStandards}
-              projectStandardLinks={projectStandardLinks}
-              onPriceManual={handlePriceManual}
-            />
-          </TabsContent>
-
-          <TabsContent value="build-up">
+          <TabsContent value="estimate">
             <BuildUpPanel
               projectId={project.id}
               documents={documents}
@@ -379,14 +322,14 @@ export function ProjectWorkspaceTabs({
               standardLinks={standardLinks}
               estimateLoadError={estimateLoadError}
               onNavigateTab={(tab, takeoffId) => {
-                if (takeoffId && tab === "commercial") {
+                if (takeoffId && resolveWorkspaceTab(tab) === "commercial") {
                   navigateTab(tab, { priceTakeoff: takeoffId });
                   return;
                 }
                 navigateTab(tab);
               }}
               pricingTakeoffId={
-                activeTab === "build-up" ? pricingTakeoffId : null
+                activeTab === "estimate" ? pricingTakeoffId : null
               }
               onPricingTakeoffConsumed={clearPricingTakeoffParam}
             />

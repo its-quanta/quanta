@@ -36,9 +36,9 @@ type ProjectOverviewPanelProps = {
 };
 
 const WORKFLOW_TAB: Record<string, WorkspaceTabValue> = {
-  upload: "plans-specs",
-  "ai-review": "ai-review",
-  "build-up": "build-up",
+  documents: "documents",
+  scope: "scope",
+  estimate: "estimate",
   commercial: "commercial",
   submit: "submission",
 };
