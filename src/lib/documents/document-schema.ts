@@ -70,8 +70,19 @@ function normalizeDocumentType(value: string | null | undefined): DocumentClassi
 function normalizeProcessingStatus(
   value: string | null | undefined
 ): DocumentProcessingStatus {
-  if (value && PROCESSING_STATUSES.has(value)) {
-    return value as DocumentProcessingStatus;
+  if (!value) {
+    return "ready";
+  }
+
+  const legacyMap: Record<string, DocumentProcessingStatus> = {
+    analysing: "pending",
+    analysed: "ready",
+    analysis_failed: "failed",
+  };
+
+  const mapped = legacyMap[value] ?? value;
+  if (PROCESSING_STATUSES.has(mapped)) {
+    return mapped as DocumentProcessingStatus;
   }
 
   return "ready";

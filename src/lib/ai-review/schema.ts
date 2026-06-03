@@ -1,9 +1,34 @@
 import { isAiReviewStatus } from "@/src/lib/ai-review/constants";
-import type { AiReviewItem } from "@/src/types/database";
+import type { AiReviewItem, AiReviewItemStatus } from "@/src/types/database";
+
+function normalizeAiReviewStatus(raw: unknown): AiReviewItemStatus {
+  const value = String(raw ?? "pending").trim().toLowerCase();
+
+  if (isAiReviewStatus(value)) {
+    return value;
+  }
+
+  switch (value) {
+    case "approved":
+    case "accept":
+    case "accepted":
+      return "accepted";
+    case "reject":
+    case "rejected":
+      return "rejected";
+    case "needs adjustment":
+    case "needs_adjustment":
+    case "adjusted":
+      return "adjusted";
+    case "pending":
+    case "draft":
+    default:
+      return "pending";
+  }
+}
 
 export function mapAiReviewItemRow(row: Record<string, unknown>): AiReviewItem {
-  const statusRaw = String(row.status ?? "pending");
-  const status = isAiReviewStatus(statusRaw) ? statusRaw : "pending";
+  const status = normalizeAiReviewStatus(row.status);
 
   return {
     id: String(row.id),

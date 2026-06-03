@@ -14,8 +14,21 @@ export const AI_REVIEW_STATUS_LABELS: Record<AiReviewItemStatus, string> = {
   adjusted: "Adjusted",
 };
 
+export const AI_REVIEW_COLUMNS_CORE =
+  "id, organisation_id, project_id, status, confidence, trade, description, quantity, unit, reasoning, source_document_id, drawing_reference, sheet_number, page_number, created_at" as const;
+
+export const AI_REVIEW_COLUMNS_BASE =
+  `${AI_REVIEW_COLUMNS_CORE}, result_takeoff_item_id, accepted_by, accepted_at, review_notes, updated_at` as const;
+
+/** Includes optional visual-layer column when deployed. */
 export const AI_REVIEW_COLUMNS =
-  "id, organisation_id, project_id, status, confidence, trade, description, quantity, unit, reasoning, source_document_id, drawing_reference, sheet_number, page_number, overlay_geometry, result_takeoff_item_id, accepted_by, accepted_at, review_notes, created_at, updated_at" as const;
+  `${AI_REVIEW_COLUMNS_BASE}, overlay_geometry` as const;
+
+export const AI_REVIEW_COLUMN_SELECT_ATTEMPTS = [
+  AI_REVIEW_COLUMNS_CORE,
+  AI_REVIEW_COLUMNS_BASE,
+  AI_REVIEW_COLUMNS,
+] as const;
 
 export function isAiReviewStatus(value: string): value is AiReviewItemStatus {
   return (AI_REVIEW_STATUSES as readonly string[]).includes(value);

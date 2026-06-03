@@ -24,7 +24,7 @@ export const ANALYSIS_PROGRESS_STAGES: AnalysisStageDefinition[] = [
 ];
 
 export type AnalysisStageState = {
-  id: AnalysisStageId;
+  id: string;
   label: string;
   percent: number;
   status: AnalysisStageStatus;

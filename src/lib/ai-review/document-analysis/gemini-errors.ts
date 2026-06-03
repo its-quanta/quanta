@@ -9,6 +9,7 @@ export type GeminiFailureCode =
   | "format_rejected"
   | "timeout"
   | "parse_failed"
+  | "invalid_response"
   | "generic_failed";
 
 export function userMessageForGeminiFailure(code: GeminiFailureCode): string {
@@ -29,9 +30,11 @@ export function userMessageForGeminiFailure(code: GeminiFailureCode): string {
       return ANALYSIS_ERRORS.geminiTimeout;
     case "parse_failed":
       return ANALYSIS_ERRORS.geminiParseFailed;
+    case "invalid_response":
+      return ANALYSIS_ERRORS.geminiInvalidResponse;
     case "generic_failed":
     default:
-      return ANALYSIS_ERRORS.geminiAnalysisFailedWithLogs;
+      return ANALYSIS_ERRORS.geminiRequestFailed;
   }
 }
 

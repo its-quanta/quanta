@@ -64,7 +64,6 @@ export function PlansSpecsPanel({
         <CardContent>
           <DocumentAnalysisPanel
             projectId={projectId}
-            documents={documents}
             documentPages={documentPages}
           />
         </CardContent>

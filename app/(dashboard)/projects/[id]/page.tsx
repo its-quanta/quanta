@@ -83,7 +83,9 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     getStandardLinksForProject(project.id, profile.organisation_id),
     getClarificationsForProject(project.id, profile.organisation_id),
     getClarificationTemplatesForOrganisation(profile.organisation_id),
-    getAiReviewItemsForProject(project.id, profile.organisation_id),
+    getAiReviewItemsForProject(project.id, profile.organisation_id).then(
+      (result) => result.items
+    ),
   ]);
 
   const { materialItems, labourItems, loadError: estimateLoadError } =

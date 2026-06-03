@@ -3,8 +3,11 @@
 import { revalidatePath } from "next/cache";
 
 import type { AiReviewApprovalAction } from "@/src/lib/ai-review/approval-history";
-import { AI_REVIEW_COLUMNS } from "@/src/lib/ai-review/constants";
-import { mapAiReviewItemRow } from "@/src/lib/ai-review/schema";
+import {
+  fetchReviewItemById,
+  markReviewItemAccepted,
+  updateReviewItemWithFallback,
+} from "@/src/lib/ai-review/db-helpers";
 import { requireOrganisationProfile } from "@/src/lib/auth/require-profile";
 import { createTakeoffItemAction } from "@/src/lib/takeoff/actions";
 import { createClient } from "@/src/lib/supabase/server";
@@ -53,24 +56,7 @@ async function fetchReviewItem(
   projectId: string,
   organisationId: string
 ) {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("ai_review_items")
-    .select(AI_REVIEW_COLUMNS)
-    .eq("id", itemId)
-    .eq("project_id", projectId)
-    .eq("organisation_id", organisationId)
-    .maybeSingle();
-
-  if (error) {
-    return { error: error.message, item: null };
-  }
-
-  if (!data) {
-    return { error: "Suggestion not found.", item: null };
-  }
-
-  return { item: mapAiReviewItemRow(data as Record<string, unknown>) };
+  return fetchReviewItemById(itemId, projectId, organisationId);
 }
 
 export async function acceptAiReviewItemAction(
@@ -113,7 +99,7 @@ export async function acceptAiReviewItemAction(
     drawing_reference: item.drawing_reference,
     page_number: item.page_number,
     sheet_number: item.sheet_number,
-    notes: item.review_notes,
+    notes: item.review_notes ?? item.reasoning,
     confidence_score: item.confidence,
     ai_generated: true,
     reviewed: false,
@@ -125,19 +111,19 @@ export async function acceptAiReviewItemAction(
   }
 
   const supabase = await createClient();
-  const { error: updateError } = await supabase
-    .from("ai_review_items")
-    .update({
-      status: "accepted",
-      accepted_by: profile.id,
-      accepted_at: new Date().toISOString(),
-      result_takeoff_item_id: createResult.itemId,
-    })
-    .eq("id", itemId)
-    .eq("organisation_id", profile.organisation_id);
+  const acceptedAt = new Date().toISOString();
+  const { error: updateError } = await markReviewItemAccepted(
+    supabase,
+    itemId,
+    projectId,
+    profile.organisation_id,
+    createResult.itemId,
+    profile.id,
+    acceptedAt
+  );
 
   if (updateError) {
-    return { error: updateError.message };
+    return { error: updateError };
   }
 
   await recordApprovalEvent(
@@ -173,14 +159,15 @@ export async function rejectAiReviewItemAction(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("ai_review_items")
-    .update({ status: "rejected" })
-    .eq("id", itemId)
-    .eq("organisation_id", profile.organisation_id);
+  const { error } = await updateReviewItemWithFallback(
+    supabase,
+    itemId,
+    profile.organisation_id,
+    [{ status: "rejected" }]
+  );
 
   if (error) {
-    return { error: error.message };
+    return { error };
   }
 
   await recordApprovalEvent(
@@ -232,21 +219,32 @@ export async function adjustAiReviewItemAction(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("ai_review_items")
-    .update({
-      status: "adjusted",
-      description,
-      trade,
-      quantity: input.quantity,
-      unit: input.unit.trim() || "each",
-      review_notes: input.review_notes?.trim() || null,
-    })
-    .eq("id", itemId)
-    .eq("organisation_id", profile.organisation_id);
+  const trimmedNotes = input.review_notes?.trim() || null;
+  const { error } = await updateReviewItemWithFallback(
+    supabase,
+    itemId,
+    profile.organisation_id,
+    [
+      {
+        status: "adjusted",
+        description,
+        trade,
+        quantity: input.quantity,
+        unit: input.unit.trim() || "each",
+        review_notes: trimmedNotes,
+      },
+      {
+        status: "adjusted",
+        description,
+        trade,
+        quantity: input.quantity,
+        unit: input.unit.trim() || "each",
+      },
+    ]
+  );
 
   if (error) {
-    return { error: error.message };
+    return { error };
   }
 
   await recordApprovalEvent(
@@ -268,17 +266,6 @@ export type {
   AiReviewTradeFocus,
   AnalyseDocumentsResult,
 } from "@/src/lib/ai-review/document-analysis/types";
-
-/** Quick path: analyse all small supported files (skips large PDFs). */
-export async function analyseProjectDocumentsAction(
-  projectId: string,
-  tradeFocus: AiReviewTradeFocus
-): Promise<AnalyseDocumentsResult> {
-  const { analyseSmallProjectDocumentsAction } = await import(
-    "@/src/lib/ai-review/document-analysis/actions"
-  );
-  return analyseSmallProjectDocumentsAction(projectId, tradeFocus);
-}
 
 export async function fetchAiReviewApprovalHistoryAction(
   itemId: string,
@@ -356,4 +343,25 @@ export async function approveAiReviewSegmentAction(
 
   revalidateProject(projectId);
   return {};
+}
+
+export async function fetchAiReviewItemsForProjectAction(projectId: string) {
+  const { profile } = await requireOrganisationProfile();
+  const { getAiReviewItemsForProject } = await import("@/src/lib/ai-review/queries");
+  const result = await getAiReviewItemsForProject(
+    projectId,
+    profile.organisation_id
+  );
+
+  return {
+    items: result.items,
+    error: result.error,
+    meta: {
+      projectId,
+      organisationId: profile.organisation_id,
+      rowCount: result.items.length,
+      source: result.source,
+      statuses: [...new Set(result.items.map((item) => item.status))],
+    },
+  };
 }

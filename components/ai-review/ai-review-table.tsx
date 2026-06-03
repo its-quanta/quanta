@@ -66,6 +66,11 @@ export function AiReviewTable({
         return;
       }
       router.refresh();
+      window.dispatchEvent(
+        new CustomEvent("quanta:ai-review-updated", {
+          detail: { projectId },
+        })
+      );
     });
   }
 

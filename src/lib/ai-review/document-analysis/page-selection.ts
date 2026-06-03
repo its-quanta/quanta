@@ -72,7 +72,7 @@ export function resolvePagePreset(input: {
       (row) =>
         row.document_id === documentId &&
         row.page_type === pageType &&
-        row.include_in_analysis
+        (row.include_in_analysis ?? true)
     )
     .map((row) => row.page_number);
 

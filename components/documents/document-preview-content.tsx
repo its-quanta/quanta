@@ -7,6 +7,7 @@ import {
   DOCUMENT_CLASSIFICATION_LABELS,
   fileTypeLabel,
 } from "@/src/lib/documents/constants";
+import { ANALYSIS_ERRORS } from "@/src/lib/ai-review/document-analysis/messages";
 import { getDocumentPreviewKind } from "@/src/lib/documents/preview";
 import { formatDate } from "@/src/lib/format";
 import type { Document } from "@/src/types/database";
@@ -40,19 +41,23 @@ export function DocumentPreviewContent({
 
   if (error) {
     return (
-      <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-muted/20 px-4 py-8 text-center">
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      </div>
+      <PreviewUnavailableState
+        document={document}
+        signedUrl={null}
+        message={ANALYSIS_ERRORS.previewFailed}
+        pageNumberHint={pageNumberHint}
+      />
     );
   }
 
   if (!signedUrl) {
     return (
-      <div className="flex min-h-[200px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/20">
-        <p className="text-sm text-muted-foreground">No preview available.</p>
-      </div>
+      <PreviewUnavailableState
+        document={document}
+        signedUrl={null}
+        message="Preview unavailable. Open in new tab."
+        pageNumberHint={pageNumberHint}
+      />
     );
   }
 
@@ -60,11 +65,11 @@ export function DocumentPreviewContent({
     // TODO: Navigate PDF viewer to pageNumberHint when page-level deep linking is implemented.
     if (embedFailed) {
       return (
-        <UnsupportedPreviewFallback
+        <PreviewUnavailableState
           document={document}
           signedUrl={signedUrl}
           pageNumberHint={pageNumberHint}
-          message="Embedded PDF preview is unavailable in this browser."
+          message="Preview unavailable. Open in new tab."
         />
       );
     }
@@ -104,35 +109,31 @@ export function DocumentPreviewContent({
   }
 
   return (
-    <UnsupportedPreviewFallback
+    <PreviewUnavailableState
       document={document}
       signedUrl={signedUrl}
       pageNumberHint={pageNumberHint}
+      message="Preview unavailable. Open in new tab."
     />
   );
 }
 
-function UnsupportedPreviewFallback({
+function PreviewUnavailableState({
   document,
   signedUrl,
   pageNumberHint,
   message,
 }: {
   document: Document;
-  signedUrl: string;
+  signedUrl: string | null;
   pageNumberHint?: number | null;
-  message?: string;
+  message: string;
 }) {
   return (
     <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/20 p-4">
-      {message ? (
-        <p className="text-sm text-muted-foreground">{message}</p>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          Inline preview is not available for this file type. Download the file
-          to open it locally.
-        </p>
-      )}
+      <p className="text-sm text-muted-foreground" role="status">
+        {message}
+      </p>
       <dl className="grid gap-2 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-xs text-muted-foreground">File name</dt>
@@ -165,18 +166,20 @@ function UnsupportedPreviewFallback({
           </div>
         ) : null}
       </dl>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" variant="outline" asChild>
-          <a href={signedUrl} target="_blank" rel="noopener noreferrer">
-            Open in new tab
-          </a>
-        </Button>
-        <Button type="button" size="sm" variant="outline" asChild>
-          <a href={signedUrl} download={document.file_name}>
-            Download
-          </a>
-        </Button>
-      </div>
+      {signedUrl ? (
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" asChild>
+            <a href={signedUrl} target="_blank" rel="noopener noreferrer">
+              Open in new tab
+            </a>
+          </Button>
+          <Button type="button" size="sm" variant="outline" asChild>
+            <a href={signedUrl} download={document.file_name}>
+              Download
+            </a>
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

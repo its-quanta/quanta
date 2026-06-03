@@ -3,10 +3,12 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import { AiReviewAdjustDialog } from "@/components/ai-review/ai-review-adjust-dialog";
 import { AiReviewConfidenceBadge } from "@/components/ai-review/ai-review-confidence-badge";
 import {
   matchesConfidenceFilter,
 } from "@/components/ai-review/ai-review-mode-bar";
+import { AiReviewSourceDialog } from "@/components/ai-review/ai-review-source-dialog";
 import { AiReviewStatusBadge } from "@/components/ai-review/ai-review-status-badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -43,6 +45,7 @@ export type AiReviewQueueSort =
 type AiReviewApprovalQueueProps = {
   projectId: string;
   items: AiReviewItem[];
+  allItems?: AiReviewItem[];
   documents: Document[];
   documentPages: DocumentPage[];
   selectedItemId: string | null;
@@ -50,15 +53,6 @@ type AiReviewApprovalQueueProps = {
   onOpenEvidence: (item: AiReviewItem) => void;
   confidenceFilter: "medium" | "low" | null;
 };
-
-function hasEvidenceLink(item: AiReviewItem): boolean {
-  return Boolean(
-    item.source_document_id ||
-      item.drawing_reference ||
-      item.page_number != null ||
-      item.reasoning
-  );
-}
 
 function sortItems(
   items: AiReviewItem[],
@@ -96,6 +90,7 @@ function sortItems(
 export function AiReviewApprovalQueue({
   projectId,
   items,
+  allItems,
   documents,
   documentPages,
   selectedItemId,
@@ -108,6 +103,8 @@ export function AiReviewApprovalQueue({
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [sort, setSort] = useState<AiReviewQueueSort>("confidence");
+  const [adjustItem, setAdjustItem] = useState<AiReviewItem | null>(null);
+  const [sourceItem, setSourceItem] = useState<AiReviewItem | null>(null);
 
   const drawingContext = useMemo(
     () => buildDrawingReferenceContext(documents, documentPages),
@@ -132,15 +129,35 @@ export function AiReviewApprovalQueue({
         return;
       }
       router.refresh();
+      window.dispatchEvent(
+        new CustomEvent("quanta:ai-review-updated", {
+          detail: { projectId },
+        })
+      );
     });
+  }
+
+  const totalCount = allItems?.length ?? items.length;
+
+  if (totalCount === 0) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 px-4 py-10 text-center">
+        <p className="text-sm font-medium">No AI suggestions yet</p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Run document analysis on Plans &amp; specs to generate draft review
+          items here.
+        </p>
+      </div>
+    );
   }
 
   if (items.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 px-4 py-10 text-center">
-        <p className="text-sm font-medium">Approval queue is empty</p>
+        <p className="text-sm font-medium">No pending suggestions</p>
         <p className="mt-2 text-xs text-muted-foreground">
-          AI suggestions will appear here for evidence-backed review.
+          All {totalCount} suggestion{totalCount === 1 ? "" : "s"} have been
+          reviewed.
         </p>
       </div>
     );
@@ -179,20 +196,23 @@ export function AiReviewApprovalQueue({
           <TableHeader>
             <TableRow className="sticky top-0 z-10 bg-muted/50 hover:bg-muted/50">
               <TableHead className="text-xs">Trade</TableHead>
-              <TableHead className="text-xs">Item</TableHead>
+              <TableHead className="text-xs">Description</TableHead>
               <TableHead className="text-right text-xs">Qty</TableHead>
+              <TableHead className="text-xs">Unit</TableHead>
               <TableHead className="text-xs">Conf.</TableHead>
-              <TableHead className="text-xs">Status</TableHead>
+              <TableHead className="text-xs">Source</TableHead>
+              <TableHead className="text-xs">Pg</TableHead>
+              <TableHead className="text-xs">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {visibleItems.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={8}
                   className="text-center text-xs text-muted-foreground"
                 >
-                  No items match this filter.
+                  No pending items match this filter.
                 </TableCell>
               </TableRow>
             ) : (
@@ -201,7 +221,10 @@ export function AiReviewApprovalQueue({
                 const canDecide =
                   item.status === "pending" || item.status === "adjusted";
                 const selected = item.id === selectedItemId;
-                const evidence = hasEvidenceLink(item);
+                const sourceName = item.source_document_id
+                  ? drawingContext.documentNames.get(item.source_document_id) ??
+                    "Document"
+                  : "—";
 
                 return (
                   <TableRow
@@ -216,28 +239,35 @@ export function AiReviewApprovalQueue({
                     }}
                   >
                     <TableCell className="text-xs">{item.trade}</TableCell>
-                    <TableCell className="max-w-[7rem]">
+                    <TableCell className="max-w-[10rem]">
                       <p className="line-clamp-2 text-xs font-medium">
                         {item.description}
                       </p>
+                      {item.reasoning ? (
+                        <p className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">
+                          {item.reasoning}
+                        </p>
+                      ) : null}
                     </TableCell>
                     <TableCell className="text-right font-mono text-[10px] tabular-nums">
                       {formatQuantity(item.quantity)}
                     </TableCell>
+                    <TableCell className="text-xs">{item.unit}</TableCell>
                     <TableCell>
                       <AiReviewConfidenceBadge
                         confidence={item.confidence}
                         className="text-[10px]"
                       />
                     </TableCell>
-                    <TableCell>
-                      <AiReviewStatusBadge status={item.status} />
+                    <TableCell className="max-w-[6rem] truncate text-[10px]">
+                      {sourceName}
                     </TableCell>
-                    <TableCell
-                      className="hidden"
-                      onClick={(event) => event.stopPropagation()}
-                    >
+                    <TableCell className="font-mono text-[10px] tabular-nums">
+                      {item.page_number ?? "—"}
+                    </TableCell>
+                    <TableCell onClick={(event) => event.stopPropagation()}>
                       <div className="flex flex-col gap-1">
+                        <AiReviewStatusBadge status={item.status} />
                         {canDecide ? (
                           <>
                             <Button
@@ -251,7 +281,17 @@ export function AiReviewApprovalQueue({
                                 )
                               }
                             >
-                              Approve
+                              Accept
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              className="h-7 text-xs"
+                              disabled={rowPending}
+                              onClick={() => setAdjustItem(item)}
+                            >
+                              Adjust
                             </Button>
                             <Button
                               type="button"
@@ -269,17 +309,21 @@ export function AiReviewApprovalQueue({
                             </Button>
                           </>
                         ) : null}
-                        {evidence ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs"
-                            onClick={() => onOpenEvidence(item)}
-                          >
-                            Evidence
-                          </Button>
-                        ) : null}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            if (item.source_document_id) {
+                              setSourceItem(item);
+                            } else {
+                              onOpenEvidence(item);
+                            }
+                          }}
+                        >
+                          Open source
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -289,9 +333,38 @@ export function AiReviewApprovalQueue({
           </TableBody>
         </Table>
       </div>
+
+      <AiReviewAdjustDialog
+        item={adjustItem}
+        open={adjustItem != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAdjustItem(null);
+          }
+        }}
+        projectId={projectId}
+        onSuccess={() => {
+          setAdjustItem(null);
+          router.refresh();
+        }}
+      />
+
+      <AiReviewSourceDialog
+        item={sourceItem}
+        open={sourceItem != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSourceItem(null);
+          }
+        }}
+        projectId={projectId}
+        documents={documents}
+        documentPages={documentPages}
+      />
+
       <p className="text-[10px] text-muted-foreground">
-        Select a row to open the evidence drawer. Approve, adjust, or reject from
-        the drawer.
+        Draft suggestions only — accept, adjust, or reject before anything is
+        added to your live takeoff.
       </p>
     </div>
   );

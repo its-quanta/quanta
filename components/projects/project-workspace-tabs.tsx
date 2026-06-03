@@ -252,6 +252,14 @@ export function ProjectWorkspaceTabs({
     setWorkspaceContext,
   ]);
 
+  const aiReviewPendingCount = useMemo(
+    () =>
+      aiReviewItems.filter(
+        (item) => item.status === "pending" || item.status === "adjusted"
+      ).length,
+    [aiReviewItems]
+  );
+
   const isReviewTab = activeTab === "ai-review";
 
   return (
@@ -293,6 +301,9 @@ export function ProjectWorkspaceTabs({
             {workspaceTabs.map((tab) => (
               <TabsTrigger key={tab.value} value={tab.value}>
                 {tab.label}
+                {tab.value === "ai-review" && aiReviewPendingCount > 0
+                  ? ` (${aiReviewPendingCount})`
+                  : ""}
               </TabsTrigger>
             ))}
           </TabsList>

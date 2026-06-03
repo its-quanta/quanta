@@ -19,6 +19,8 @@ export type AnalysisErrorCode =
   | "gemini_timeout"
   | "gemini_parse_failed"
   | "gemini_analysis_failed"
+  | "suggestions_save_failed"
+  | "analysis_session_expired"
   | "unknown";
 
 const EXACT_MESSAGES: Array<[string, AnalysisErrorCode]> = [
@@ -33,7 +35,12 @@ const EXACT_MESSAGES: Array<[string, AnalysisErrorCode]> = [
   [ANALYSIS_ERRORS.geminiFormatRejected, "gemini_format_rejected"],
   [ANALYSIS_ERRORS.geminiTimeout, "gemini_timeout"],
   [ANALYSIS_ERRORS.geminiParseFailed, "gemini_parse_failed"],
+  [ANALYSIS_ERRORS.geminiInvalidResponse, "gemini_parse_failed"],
+  [ANALYSIS_ERRORS.geminiRequestFailed, "gemini_analysis_failed"],
   [ANALYSIS_ERRORS.geminiAnalysisFailedWithLogs, "gemini_analysis_failed"],
+  [ANALYSIS_ERRORS.analysisFailed, "gemini_analysis_failed"],
+  [ANALYSIS_ERRORS.suggestionsSaveFailed, "suggestions_save_failed"],
+  [ANALYSIS_ERRORS.analysisSessionExpired, "analysis_session_expired"],
   [ANALYSIS_ERRORS.batchTooLarge, "document_too_large"],
   [ANALYSIS_ERRORS.selectPagesForLargeFile, "document_too_large"],
   [ANALYSIS_ERRORS.couldNotDownload, "storage_download_failed"],
@@ -72,6 +79,20 @@ export function mapAnalysisError(
     return { code: "gemini_timeout", message: ANALYSIS_ERRORS.geminiTimeout };
   }
 
+  if (text.includes("quanta could not read the response")) {
+    return {
+      code: "gemini_parse_failed",
+      message: ANALYSIS_ERRORS.geminiParseFailed,
+    };
+  }
+
+  if (text.includes("not valid review suggestion json")) {
+    return {
+      code: "gemini_parse_failed",
+      message: ANALYSIS_ERRORS.geminiParseFailed,
+    };
+  }
+
   if (text.includes("could not be parsed")) {
     return {
       code: "gemini_parse_failed",
@@ -98,4 +119,47 @@ export function mapAnalysisError(
   }
 
   return { code: "unknown", message: error };
+}
+
+const ERROR_REFERENCE_TO_CODE: Record<string, AnalysisErrorCode> = {
+  gemini_key_missing: "gemini_key_missing",
+  gemini_key_invalid: "gemini_key_invalid",
+  gemini_model_unavailable: "gemini_model_unavailable",
+  gemini_timeout: "gemini_timeout",
+  gemini_parse_failed: "gemini_parse_failed",
+  gemini_format_rejected: "gemini_format_rejected",
+  pdf_extraction_failed: "extract_failed",
+  selected_pages_invalid: "no_pages_selected",
+  upload_failed: "storage_download_failed",
+  batch_too_large: "document_too_large",
+  analysis_failed: "gemini_analysis_failed",
+  suggestions_save_failed: "suggestions_save_failed",
+  analysis_session_expired: "analysis_session_expired",
+};
+
+export function analysisErrorCodeFromReference(
+  reference: string | null | undefined
+): AnalysisErrorCode | null {
+  if (!reference?.trim()) {
+    return null;
+  }
+
+  return ERROR_REFERENCE_TO_CODE[reference.trim().toLowerCase()] ?? null;
+}
+
+export function resolveAnalysisErrorDisplay(input: {
+  errorMessage?: string | null;
+  errorReference?: string | null;
+  batchStatus?: string;
+}): { code: AnalysisErrorCode; message: string } {
+  const mapped = mapAnalysisError(
+    input.errorMessage ?? undefined,
+    input.batchStatus
+  );
+  const referenceCode = analysisErrorCodeFromReference(input.errorReference);
+
+  return {
+    code: referenceCode ?? mapped.code,
+    message: mapped.message,
+  };
 }

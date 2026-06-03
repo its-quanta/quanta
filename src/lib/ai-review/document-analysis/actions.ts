@@ -24,12 +24,23 @@ import { countLowConfidenceSuggestions, buildSuccessResult } from "@/src/lib/ai-
 import type {
   AiReviewTradeFocus,
   AnalyseDocumentsResult,
-  AnalysisFailedDocument,
+  DocumentAnalysisMode,
 } from "@/src/lib/ai-review/document-analysis/types";
+import {
+  DEFAULT_DOCUMENT_ANALYSIS_MODE,
+  normalizeDocumentAnalysisMode,
+} from "@/src/lib/ai-review/document-analysis/types";
+import {
+  downloadDocumentBytes,
+  fetchProjectDocument,
+  fetchProjectTradeScope,
+  insertAiReviewSuggestions,
+  tryUpdateDocumentAnalysisStatus,
+  updateDocumentPagesAnalysisStatus,
+} from "@/src/lib/ai-review/document-analysis/document-analysis-db";
 import { requireOrganisationProfile } from "@/src/lib/auth/require-profile";
-import { PROJECT_DOCUMENTS_BUCKET } from "@/src/lib/documents/constants";
 import { createClient } from "@/src/lib/supabase/server";
-import type { Document, DocumentPage } from "@/src/types/database";
+import type { DocumentPage } from "@/src/types/database";
 
 export type DocumentAnalysisCatalogItem = {
   id: string;
@@ -59,6 +70,7 @@ export type DocumentAnalysisMetadata = {
 
 export type AnalyseProjectDocumentsInput = {
   tradeFocus: AiReviewTradeFocus;
+  analysisMode?: DocumentAnalysisMode;
   documentId: string;
   /** Selected 1-based page numbers (camelCase). */
   selectedPages?: number[];
@@ -84,111 +96,6 @@ function revalidateProject(projectId: string) {
 function isSupportedAnalysisMimeType(mimeType: string | null | undefined): boolean {
   const type = (mimeType ?? "").toLowerCase();
   return (SUPPORTED_ANALYSIS_MIME_TYPES as readonly string[]).includes(type);
-}
-
-function isKnownUnsupportedOfficeType(mimeType: string | null | undefined): boolean {
-  const type = (mimeType ?? "").toLowerCase();
-  return (
-    type.includes("officedocument") ||
-    type.includes("msword") ||
-    type.includes("spreadsheet") ||
-    type.includes("excel") ||
-    type.includes("word")
-  );
-}
-
-async function downloadDocumentBytes(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  storagePath: string
-): Promise<{ bytes: Buffer; sizeBytes: number } | { error: string }> {
-  const { data, error } = await supabase.storage
-    .from(PROJECT_DOCUMENTS_BUCKET)
-    .download(storagePath);
-
-  if (error || !data) {
-    return { error: ANALYSIS_ERRORS.couldNotDownload };
-  }
-
-  const arrayBuffer = await data.arrayBuffer();
-  return {
-    bytes: Buffer.from(arrayBuffer),
-    sizeBytes: arrayBuffer.byteLength,
-  };
-}
-
-async function fetchProjectDocument(
-  projectId: string,
-  organisationId: string,
-  documentId: string
-): Promise<Document | null> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("documents")
-    .select(
-      "id, organisation_id, project_id, file_name, storage_path, file_type, document_type, processing_status"
-    )
-    .eq("id", documentId)
-    .eq("project_id", projectId)
-    .eq("organisation_id", organisationId)
-    .maybeSingle();
-
-  if (error || !data) {
-    return null;
-  }
-
-  return data as unknown as Document;
-}
-
-async function tryUpdateDocumentAnalysisStatus(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  documentId: string,
-  organisationId: string,
-  projectId: string,
-  nextStatus: "analysing" | "analysed" | "analysis_failed"
-) {
-  const { error } = await supabase
-    .from("documents")
-    .update({ processing_status: nextStatus })
-    .eq("id", documentId)
-    .eq("organisation_id", organisationId)
-    .eq("project_id", projectId);
-
-  if (error) {
-    console.warn(
-      "[document-analysis] processing_status update skipped:",
-      documentId,
-      nextStatus,
-      error.message
-    );
-  }
-}
-
-async function updateDocumentPagesAnalysisStatus(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  organisationId: string,
-  projectId: string,
-  documentId: string,
-  pageNumbers: number[],
-  status: string
-) {
-  for (const pageNumber of pageNumbers) {
-    const { error } = await supabase.from("document_pages").upsert(
-      {
-        organisation_id: organisationId,
-        project_id: projectId,
-        document_id: documentId,
-        page_number: pageNumber,
-        include_in_analysis: true,
-        analysis_status: status,
-      },
-      { onConflict: "document_id,page_number" }
-    );
-
-    if (error && !/column .+ does not exist/i.test(error.message)) {
-      console.warn("[document-analysis] document_pages upsert skipped:", error.message);
-      return;
-    }
-  }
 }
 
 export async function listDocumentsForAnalysisAction(
@@ -374,8 +281,8 @@ export async function saveDocumentPageSelectionsAction(
       page_number: row.pageNumber,
       page_label: row.pageLabel?.trim() || null,
       page_type: row.pageType ?? null,
-      include_in_analysis: row.includeInAnalysis ?? false,
-      analysis_status: row.includeInAnalysis ? "selected" : "pending",
+      include_in_analysis: row.includeInAnalysis ?? true,
+      analysis_status: (row.includeInAnalysis ?? true) ? "selected" : "pending",
     }));
 
   if (rows.length === 0) {
@@ -410,6 +317,9 @@ export async function analyseProjectDocumentsBatchAction(
     batchStatus?: "complete" | "failed" | "requires_page_selection";
   }
 > {
+  const selectedPagesFromInput =
+    input.selectedPages ?? input.selected_pages ?? [];
+
   const { profile } = await requireOrganisationProfile();
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
@@ -486,8 +396,7 @@ export async function analyseProjectDocumentsBatchAction(
 
   const resolved = resolveSelectedPagesForAnalysis({
     body: {
-      selectedPages: input.selectedPages,
-      selected_pages: input.selected_pages,
+      selectedPages: selectedPagesFromInput,
       pageNumbers: input.pageNumbers,
       pageRangeInput: input.pageRangeInput,
       preset: input.preset,
@@ -577,12 +486,21 @@ export async function analyseProjectDocumentsBatchAction(
     };
   }
 
+  if (isPdf && estimatedBatchBytes > MAX_ANALYSIS_BATCH_BYTES) {
+    return {
+      error: ANALYSIS_ERRORS.batchTooLarge,
+      batchStatus: "requires_page_selection",
+      selectedPageCount: selectedPages.length,
+      estimatedBatchBytes,
+    };
+  }
+
   await tryUpdateDocumentAnalysisStatus(
     supabase,
     doc.id,
     profile.organisation_id,
     projectId,
-    "analysing"
+    "pending"
   );
 
   let payloadBytes: Buffer = downloaded.bytes;
@@ -602,7 +520,7 @@ export async function analyseProjectDocumentsBatchAction(
         doc.id,
         profile.organisation_id,
         projectId,
-        "analysis_failed"
+        "failed"
       );
       const message =
         extractError instanceof Error &&
@@ -622,7 +540,7 @@ export async function analyseProjectDocumentsBatchAction(
       doc.id,
       profile.organisation_id,
       projectId,
-      "analysis_failed"
+      "failed"
     );
     return {
       error: ANALYSIS_ERRORS.batchTooLarge,
@@ -633,6 +551,12 @@ export async function analyseProjectDocumentsBatchAction(
   }
 
   const base64Payload = payloadBytes.toString("base64");
+
+  const projectTradeScope = await fetchProjectTradeScope(
+    supabase,
+    projectId,
+    profile.organisation_id
+  );
 
   const { callGeminiForPdfSuggestions, validateAnalysisPayload } = await import(
     "@/src/lib/ai-review/document-analysis/gemini"
@@ -655,7 +579,7 @@ export async function analyseProjectDocumentsBatchAction(
       doc.id,
       profile.organisation_id,
       projectId,
-      "analysis_failed"
+      "failed"
     );
     return {
       error: userMessageForGeminiFailure(payloadValidation.code),
@@ -664,8 +588,11 @@ export async function analyseProjectDocumentsBatchAction(
   }
 
   const gemini = await callGeminiForPdfSuggestions({
-    apiKey,
     tradeFocus: input.tradeFocus,
+    analysisMode: normalizeDocumentAnalysisMode(
+      input.analysisMode ?? DEFAULT_DOCUMENT_ANALYSIS_MODE
+    ),
+    projectTradeScope,
     documents: [
       {
         id: doc.id,
@@ -690,11 +617,10 @@ export async function analyseProjectDocumentsBatchAction(
       doc.id,
       profile.organisation_id,
       projectId,
-      "analysis_failed"
+      "failed"
     );
     await updateDocumentPagesAnalysisStatus(
       supabase,
-      profile.organisation_id,
       projectId,
       doc.id,
       selectedPages,
@@ -709,10 +635,10 @@ export async function analyseProjectDocumentsBatchAction(
       doc.id,
       profile.organisation_id,
       projectId,
-      "analysis_failed"
+      "failed"
     );
     return {
-      error: ANALYSIS_ERRORS.geminiParseFailed,
+      error: gemini.error ?? ANALYSIS_ERRORS.geminiParseFailed,
       batchStatus: "failed",
     };
   }
@@ -723,11 +649,10 @@ export async function analyseProjectDocumentsBatchAction(
       doc.id,
       profile.organisation_id,
       projectId,
-      "analysed"
+      "ready"
     );
     await updateDocumentPagesAnalysisStatus(
       supabase,
-      profile.organisation_id,
       projectId,
       doc.id,
       selectedPages,
@@ -747,33 +672,27 @@ export async function analyseProjectDocumentsBatchAction(
 
   const lowConfidenceCount = countLowConfidenceSuggestions(gemini.suggestions);
 
-  const rows = gemini.suggestions.map((suggestion) => ({
-    organisation_id: profile.organisation_id,
-    project_id: projectId,
-    status: "pending" as const,
-    confidence: suggestion.confidence,
-    trade: suggestion.trade || input.tradeFocus,
-    description: suggestion.description,
-    quantity: suggestion.quantity ?? 0,
-    unit: suggestion.unit?.trim() || "each",
-    reasoning: suggestion.reasoning ?? null,
-    source_document_id: suggestion.source_document_id ?? doc.id,
-    drawing_reference: suggestion.drawing_reference ?? null,
-    sheet_number: suggestion.sheet_number ?? null,
-    page_number: suggestion.page_number ?? null,
-  }));
+  const insertResult = await insertAiReviewSuggestions(
+    supabase,
+    projectId,
+    doc.id,
+    input.tradeFocus,
+    gemini.suggestions,
+    { verifiedOrganisationId: profile.organisation_id }
+  );
 
-  const { error: insertError } = await supabase.from("ai_review_items").insert(rows);
-
-  if (insertError) {
+  if (!insertResult.ok) {
     await tryUpdateDocumentAnalysisStatus(
       supabase,
       doc.id,
       profile.organisation_id,
       projectId,
-      "analysis_failed"
+      "failed"
     );
-    return { error: insertError.message, batchStatus: "failed" };
+    return {
+      error: insertResult.detail ?? insertResult.message,
+      batchStatus: "failed",
+    };
   }
 
   await tryUpdateDocumentAnalysisStatus(
@@ -781,223 +700,36 @@ export async function analyseProjectDocumentsBatchAction(
     doc.id,
     profile.organisation_id,
     projectId,
-    "analysed"
+    "ready"
   );
-  await updateDocumentPagesAnalysisStatus(
+  const pageMetadataResult = await updateDocumentPagesAnalysisStatus(
     supabase,
-    profile.organisation_id,
     projectId,
     doc.id,
     selectedPages,
     "analysed"
   );
 
+  if (!pageMetadataResult.ok) {
+    console.warn("[document-analysis] document_pages_metadata_partial_failure", {
+      projectId,
+      documentId: doc.id,
+      attempted: pageMetadataResult.attempted,
+      succeeded: pageMetadataResult.succeeded,
+      failed: pageMetadataResult.failed,
+      skipReason: pageMetadataResult.skipReason ?? null,
+      suggestionsInserted: insertResult.count,
+    });
+  }
+
   revalidateProject(projectId);
 
   return buildSuccessResult({
-    createdCount: rows.length,
+    createdCount: insertResult.count,
     analysedDocuments: [{ id: doc.id, fileName: doc.file_name }],
     pagesAnalysed: selectedPages.length,
     lowConfidenceCount,
     selectedPageCount: selectedPages.length,
     estimatedBatchBytes: payloadBytes.byteLength,
-  });
-}
-
-/** Analyse all small supported files (images and PDFs within limits). */
-export async function analyseSmallProjectDocumentsAction(
-  projectId: string,
-  tradeFocus: AiReviewTradeFocus
-): Promise<AnalyseDocumentsResult> {
-  const { profile } = await requireOrganisationProfile();
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-
-  if (!apiKey) {
-    return { error: ANALYSIS_ERRORS.geminiKeyMissing };
-  }
-
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("documents")
-    .select(
-      "id, organisation_id, project_id, file_name, storage_path, file_type, document_type, processing_status"
-    )
-    .eq("project_id", projectId)
-    .eq("organisation_id", profile.organisation_id)
-    .order("created_at", { ascending: false });
-
-  if (error || !data?.length) {
-    return { error: "No documents uploaded." };
-  }
-
-  const documents = data as unknown as Document[];
-  const supported = documents.filter((doc) =>
-    isSupportedAnalysisMimeType(doc.file_type)
-  );
-
-  if (supported.length === 0) {
-    return { error: ANALYSIS_ERRORS.unsupportedFileType };
-  }
-
-  const base64Docs: Array<{
-    id: string;
-    fileName: string;
-    mimeType: string;
-    base64: string;
-  }> = [];
-
-  const failedDocuments: AnalysisFailedDocument[] = [];
-  let skippedLarge = false;
-
-  for (const doc of supported.slice(0, 4)) {
-    const storagePath = doc.storage_path?.trim();
-    if (!storagePath) {
-      failedDocuments.push({
-        fileName: doc.file_name,
-        reason: "Storage path missing. Re-upload this document.",
-      });
-      continue;
-    }
-
-    const downloaded = await downloadDocumentBytes(supabase, storagePath);
-    if ("error" in downloaded) {
-      failedDocuments.push({
-        fileName: doc.file_name,
-        reason: "Storage download failed.",
-      });
-      continue;
-    }
-
-    const mimeType = (doc.file_type || "application/pdf").toLowerCase();
-
-    if (isPdfMimeType(mimeType)) {
-      let pageCount = 0;
-      try {
-        pageCount = await getPdfPageCount(downloaded.bytes);
-      } catch {
-        failedDocuments.push({
-          fileName: doc.file_name,
-          reason: "Could not read PDF pages.",
-        });
-        continue;
-      }
-
-      if (
-        downloaded.sizeBytes > MAX_ANALYSIS_BATCH_BYTES ||
-        pageCount > MAX_ANALYSIS_BATCH_PAGES
-      ) {
-        skippedLarge = true;
-        failedDocuments.push({
-          fileName: doc.file_name,
-          reason: "Too large for automatic batch — select pages.",
-        });
-        continue;
-      }
-    } else if (downloaded.sizeBytes > MAX_ANALYSIS_BATCH_BYTES) {
-      failedDocuments.push({
-        fileName: doc.file_name,
-        reason: "Image exceeds 25 MB batch limit.",
-      });
-      continue;
-    }
-
-    base64Docs.push({
-      id: doc.id,
-      fileName: doc.file_name,
-      mimeType,
-      base64: downloaded.bytes.toString("base64"),
-    });
-  }
-
-  if (base64Docs.length === 0) {
-    if (skippedLarge) {
-      return {
-        error: ANALYSIS_ERRORS.selectPagesForLargeFile,
-        failedDocuments,
-        batchStatus: "requires_page_selection",
-      };
-    }
-    return {
-      error: "No documents could be prepared for analysis.",
-      failedDocuments,
-    };
-  }
-
-  const { callGeminiForPdfSuggestions } = await import(
-    "@/src/lib/ai-review/document-analysis/gemini"
-  );
-
-  const primaryDoc = base64Docs[0]!;
-  const totalBytes = base64Docs.reduce(
-    (sum, item) => sum + Buffer.byteLength(item.base64, "base64"),
-    0
-  );
-
-  const gemini = await callGeminiForPdfSuggestions({
-    apiKey,
-    tradeFocus,
-    documents: base64Docs,
-    logContext: {
-      documentId: primaryDoc.id,
-      fileName: primaryDoc.fileName,
-      miniPdfBytes: totalBytes,
-      selectedPagesCount: base64Docs.length,
-      geminiApiKeyPresent: Boolean(apiKey),
-    },
-  });
-
-  if (gemini.error) {
-    return { error: gemini.error };
-  }
-
-  if (gemini.parseFailed) {
-    return { error: ANALYSIS_ERRORS.geminiParseFailed };
-  }
-
-  if (gemini.suggestions.length === 0) {
-    revalidateProject(projectId);
-    return buildSuccessResult({
-      createdCount: 0,
-      analysedDocuments: base64Docs.map((d) => ({
-        id: d.id,
-        fileName: d.fileName,
-      })),
-      pagesAnalysed: base64Docs.length,
-      lowConfidenceCount: 0,
-      failedDocuments,
-      summaryMessage: ANALYSIS_ERRORS.emptySuggestions,
-    });
-  }
-
-  const lowConfidenceCount = countLowConfidenceSuggestions(gemini.suggestions);
-
-  const rows = gemini.suggestions.map((suggestion) => ({
-    organisation_id: profile.organisation_id,
-    project_id: projectId,
-    status: "pending" as const,
-    confidence: suggestion.confidence,
-    trade: suggestion.trade || tradeFocus,
-    description: suggestion.description,
-    quantity: suggestion.quantity ?? 0,
-    unit: suggestion.unit?.trim() || "each",
-    reasoning: suggestion.reasoning ?? null,
-    source_document_id: suggestion.source_document_id ?? null,
-    drawing_reference: suggestion.drawing_reference ?? null,
-    sheet_number: suggestion.sheet_number ?? null,
-    page_number: suggestion.page_number ?? null,
-  }));
-
-  const { error: insertError } = await supabase.from("ai_review_items").insert(rows);
-  if (insertError) {
-    return { error: insertError.message };
-  }
-
-  revalidateProject(projectId);
-  return buildSuccessResult({
-    createdCount: rows.length,
-    analysedDocuments: base64Docs.map((d) => ({ id: d.id, fileName: d.fileName })),
-    pagesAnalysed: base64Docs.length,
-    lowConfidenceCount,
-    failedDocuments,
   });
 }

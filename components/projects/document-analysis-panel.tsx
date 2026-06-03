@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { DocumentAnalysisProgressCard } from "@/components/projects/document-analysis-progress-card";
-import { useSimulatedAnalysisProgress } from "@/components/projects/use-simulated-analysis-progress";
+import { DocumentAnalysisStatusPanel } from "@/components/projects/document-analysis-status-panel";
+import { useAnalysisRunPolling } from "@/components/projects/use-analysis-run-polling";
+import { startDocumentAnalysisRunAction } from "@/src/lib/analysis-runs/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,16 +28,19 @@ import {
   TOO_MANY_PAGES_MESSAGE,
 } from "@/src/lib/ai-review/document-analysis/page-selection";
 import {
-  analyseProjectDocumentsBatchAction,
   getDocumentAnalysisMetadataAction,
   listDocumentsForAnalysisAction,
   type DocumentAnalysisCatalogItem,
   type DocumentAnalysisMetadata,
 } from "@/src/lib/ai-review/document-analysis/actions";
 import { resolveSelectedPagesForAnalysis } from "@/src/lib/ai-review/document-analysis/resolve-selected-pages";
-import type { AiReviewTradeFocus } from "@/src/lib/ai-review/document-analysis/types";
+import { fetchAiReviewItemsForProjectAction } from "@/src/lib/ai-review/actions";
+import type { AiReviewTradeFocus, DocumentAnalysisMode } from "@/src/lib/ai-review/document-analysis/types";
+import {
+  DEFAULT_DOCUMENT_ANALYSIS_MODE,
+  DOCUMENT_ANALYSIS_MODE_LABELS,
+} from "@/src/lib/ai-review/document-analysis/types";
 import type {
-  Document,
   DocumentClassification,
   DocumentPage,
 } from "@/src/types/database";
@@ -53,7 +57,6 @@ const DOCUMENT_TYPE_LABELS: Record<DocumentClassification, string> = {
 
 type DocumentAnalysisPanelProps = {
   projectId: string;
-  documents: Document[];
   documentPages: DocumentPage[];
 };
 
@@ -61,17 +64,19 @@ type PageSelectionMode = "range" | "first_10" | "custom" | "selected_only";
 
 export function DocumentAnalysisPanel({
   projectId,
-  documents: _documents,
   documentPages,
 }: DocumentAnalysisPanelProps) {
   const router = useRouter();
   const [isCatalogPending, startCatalogTransition] = useTransition();
   const [isMetadataPending, startMetadataTransition] = useTransition();
-  const progress = useSimulatedAnalysisProgress();
+  const analysisRun = useAnalysisRunPolling(projectId);
 
   const [catalog, setCatalog] = useState<DocumentAnalysisCatalogItem[]>([]);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [tradeFocus, setTradeFocus] = useState<AiReviewTradeFocus>("General");
+  const [analysisMode, setAnalysisMode] = useState<DocumentAnalysisMode>(
+    DEFAULT_DOCUMENT_ANALYSIS_MODE
+  );
   const [selectedDocumentId, setSelectedDocumentId] = useState<string>("");
   const [metadata, setMetadata] = useState<DocumentAnalysisMetadata | null>(
     null
@@ -320,6 +325,7 @@ export function DocumentAnalysisPanel({
           documentId: selectedDocumentId,
           selectedPages: pagesToSend,
           tradeFocus,
+          analysisMode,
         },
       });
     }
@@ -327,36 +333,49 @@ export function DocumentAnalysisPanel({
     setFormError(null);
     setMetadataError(null);
 
-    await progress.run(async () =>
-      analyseProjectDocumentsBatchAction(projectId, {
+    const started = await analysisRun.beginRun(() =>
+      startDocumentAnalysisRunAction(projectId, {
         tradeFocus,
+        analysisMode,
         documentId: selectedDocumentId,
         selectedPages: pagesToSend,
-        selected_pages: pagesToSend,
         pageRangeInput: pageRangeInput.trim() || undefined,
       })
     );
 
+    if (started.ok) {
+      return;
+    }
+
+    setFormError(started.error ?? ANALYSIS_ERRORS.analysisFailed);
+  }
+
+  function handleAnalysisDismiss() {
+    const wasComplete = analysisRun.phase === "complete";
+    analysisRun.reset();
+    if (wasComplete) {
+      router.refresh();
+    }
+  }
+
+  const formDisabled = analysisRun.isStarting || isMetadataPending;
+
+  useEffect(() => {
+    if (analysisRun.phase !== "complete") {
+      return;
+    }
+
     router.refresh();
-  }
 
-  const showProgress = progress.runPhase !== "idle";
-  const formDisabled = progress.isRunning || isMetadataPending;
-
-  if (showProgress) {
-    return (
-      <DocumentAnalysisProgressCard
-        projectId={projectId}
-        stages={progress.stages}
-        progressPercent={progress.progressPercent}
-        runPhase={progress.runPhase as "running" | "complete" | "failed"}
-        result={progress.result}
-        errorMessage={progress.errorMessage}
-        errorCode={progress.errorCode}
-        onDismiss={progress.reset}
-      />
-    );
-  }
+    void fetchAiReviewItemsForProjectAction(projectId).then((response) => {
+      console.info("[ai_review_items] client_refreshed", response.meta);
+      window.dispatchEvent(
+        new CustomEvent("quanta:ai-review-updated", {
+          detail: { projectId, count: response.meta.rowCount },
+        })
+      );
+    });
+  }, [analysisRun.phase, projectId, router]);
 
   const checkboxPageCount =
     metadata?.pageCountKnown && metadata.pageCount
@@ -365,32 +384,73 @@ export function DocumentAnalysisPanel({
 
   return (
     <div className="flex flex-col gap-5">
+      <DocumentAnalysisStatusPanel
+        projectId={projectId}
+        phase={analysisRun.phase}
+        stages={analysisRun.stages}
+        progressPercent={analysisRun.progressPercent}
+        result={analysisRun.result}
+        errorMessage={analysisRun.errorMessage}
+        errorCode={analysisRun.errorCode}
+        onDismiss={handleAnalysisDismiss}
+      />
+
       <p className="text-sm text-muted-foreground">
         AI suggestions are drafts. Review every suggestion before accepting it
         into your live takeoff. Analyse up to {MAX_ANALYSIS_BATCH_PAGES} pages
         per batch (25 MB).
       </p>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="analysis-trade">Trade focus</Label>
-        <Select
-          value={tradeFocus}
-          disabled={formDisabled}
-          onValueChange={(value) => setTradeFocus(value as AiReviewTradeFocus)}
-        >
-          <SelectTrigger id="analysis-trade" className="max-w-sm">
-            <SelectValue placeholder="Select trade focus" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Carpentry">Carpentry</SelectItem>
-            <SelectItem value="Partitions">Partitions</SelectItem>
-            <SelectItem value="Ceilings">Ceilings</SelectItem>
-            <SelectItem value="Demolition">Demolition</SelectItem>
-            <SelectItem value="Flooring">Flooring</SelectItem>
-            <SelectItem value="Joinery">Joinery</SelectItem>
-            <SelectItem value="General">General</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="analysis-trade">Trade focus</Label>
+          <Select
+            value={tradeFocus}
+            disabled={formDisabled}
+            onValueChange={(value) => setTradeFocus(value as AiReviewTradeFocus)}
+          >
+            <SelectTrigger id="analysis-trade" className="w-full">
+              <SelectValue placeholder="Select trade focus" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Carpentry">Carpentry</SelectItem>
+              <SelectItem value="Partitions">Partitions</SelectItem>
+              <SelectItem value="Ceilings">Ceilings</SelectItem>
+              <SelectItem value="Demolition">Demolition</SelectItem>
+              <SelectItem value="Flooring">Flooring</SelectItem>
+              <SelectItem value="Joinery">Joinery</SelectItem>
+              <SelectItem value="General">General</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="analysis-mode">Analysis mode</Label>
+          <Select
+            value={analysisMode}
+            disabled={formDisabled}
+            onValueChange={(value) =>
+              setAnalysisMode(value as DocumentAnalysisMode)
+            }
+          >
+            <SelectTrigger id="analysis-mode" className="w-full">
+              <SelectValue placeholder="Select analysis mode" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="scope_discovery">
+                {DOCUMENT_ANALYSIS_MODE_LABELS.scope_discovery}
+              </SelectItem>
+              <SelectItem value="quantity_takeoff">
+                {DOCUMENT_ANALYSIS_MODE_LABELS.quantity_takeoff}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {analysisMode === "scope_discovery"
+              ? "Finds likely scope items for estimator review, even without measured quantities."
+              : "Returns only items with measurable quantities or strong quantity evidence."}
+          </p>
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -688,12 +748,17 @@ export function DocumentAnalysisPanel({
           type="button"
           disabled={
             formDisabled ||
+            analysisRun.isRunning ||
             pdfAndImageCatalog.length === 0 ||
             !selectedDocumentId
           }
           onClick={() => void runAnalysis()}
         >
-          Run analysis
+          {analysisRun.isStarting
+            ? "Starting…"
+            : analysisRun.isRunning
+              ? "Analysis running…"
+              : "Run analysis"}
         </Button>
         {!selectedDocumentId ? (
           <span className="text-xs text-muted-foreground">

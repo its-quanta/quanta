@@ -201,7 +201,16 @@ export function DocumentAnalysisProgressCard({
         ) : null}
 
         {isComplete && result?.summaryMessage ? (
-          <p className="text-sm text-muted-foreground">{result.summaryMessage}</p>
+          <p className="text-sm font-medium text-emerald-900">
+            {result.summaryMessage}
+          </p>
+        ) : null}
+
+        {isComplete && suggestionsCount > 0 && !result?.summaryMessage ? (
+          <p className="text-sm font-medium text-emerald-900">
+            {suggestionsCount} suggestion{suggestionsCount === 1 ? "" : "s"}{" "}
+            created
+          </p>
         ) : null}
 
         {isComplete && result ? (
@@ -269,11 +278,12 @@ export function DocumentAnalysisProgressCard({
           ) : null}
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          {/* Future: server-sent events for live stage updates */}
-          Progress is estimated during this release. True per-stage timing will
-          follow in a later update.
-        </p>
+        {isRunning ? (
+          <p className="text-xs text-muted-foreground">
+            You can continue using Plans &amp; specs while analysis runs in the
+            background. Status updates every few seconds.
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );

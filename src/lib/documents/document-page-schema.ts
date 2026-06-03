@@ -36,7 +36,7 @@ export function normalizeDocumentPage(row: DocumentPageRow): DocumentPage {
     sheet_title: row.sheet_title ?? null,
     page_label: row.page_label ?? null,
     page_type: (row.page_type as DocumentPage["page_type"]) ?? null,
-    include_in_analysis: Boolean(row.include_in_analysis),
+    include_in_analysis: row.include_in_analysis ?? true,
     analysis_status: row.analysis_status ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at ?? row.created_at,
