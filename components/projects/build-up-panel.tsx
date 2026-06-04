@@ -1,6 +1,6 @@
 "use client";
 
-import { ScopeReviewPanel } from "@/components/projects/scope-review-panel";
+import { EstimateWorkspace } from "@/components/estimate/estimate-workspace";
 import type { PricingItemWithTakeoff } from "@/src/lib/pricing/queries";
 import type { WorkspaceTabValue } from "@/src/lib/scope-gaps/types";
 import type {
@@ -17,7 +17,7 @@ import type {
   TakeoffItemAssemblyWithPackage,
 } from "@/src/types/database";
 
-type BuildUpPanelProps = {
+export type BuildUpPanelProps = {
   projectId: string;
   documents: Document[];
   documentPages: DocumentPage[];
@@ -38,16 +38,5 @@ type BuildUpPanelProps = {
 };
 
 export function BuildUpPanel(props: BuildUpPanelProps) {
-  return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-lg font-medium">Estimate</h2>
-        <p className="text-sm text-muted-foreground">
-          Review packages, generated materials, and labour before commercial
-          pricing and submission.
-        </p>
-      </div>
-      <ScopeReviewPanel {...props} />
-    </div>
-  );
+  return <EstimateWorkspace {...props} />;
 }

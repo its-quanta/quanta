@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 
 import { AppTopBar } from "@/components/layout/app-top-bar";
+import { ProjectPageMain } from "@/components/projects/project-page-main";
 import { ProjectWorkspaceTabs } from "@/components/projects/project-workspace-tabs";
 import { getDocumentPagesForProject } from "@/src/lib/documents/document-page-queries";
 import { getDocumentsForProject } from "@/src/lib/documents/queries";
@@ -98,14 +99,15 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           "Tender workspace"
         }
       />
-      <main className="flex-1 overflow-y-auto p-6">
-        <div className="mx-auto flex w-full max-w-[96rem] flex-col gap-6">
-          <Suspense
-            fallback={
-              <div className="h-32 animate-pulse rounded-lg bg-muted/40" />
-            }
-          >
-            <ProjectWorkspaceTabs
+      <Suspense
+        fallback={
+          <main className="flex-1 overflow-y-auto p-6">
+            <div className="mx-auto h-32 max-w-[96rem] animate-pulse rounded-lg bg-muted/40" />
+          </main>
+        }
+      >
+        <ProjectPageMain>
+          <ProjectWorkspaceTabs
               project={project}
               documents={documents}
               documentPages={documentPages}
@@ -125,9 +127,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
               clarificationTemplates={clarificationTemplates}
               aiReviewItems={aiReviewItems}
             />
-          </Suspense>
-        </div>
-      </main>
+        </ProjectPageMain>
+      </Suspense>
     </>
   );
 }

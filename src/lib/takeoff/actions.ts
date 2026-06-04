@@ -677,3 +677,23 @@ export async function markTakeoffItemUnreviewedAction(
     status: "needs_review",
   });
 }
+
+export async function fetchTakeoffItemsForProjectAction(projectId: string) {
+  const session = await requireTakeoffSession(projectId);
+
+  if ("error" in session) {
+    return { items: [] as TakeoffItem[], error: session.error };
+  }
+
+  const supabase = await createClient();
+  const { queryTakeoffItemsForProject } = await import(
+    "@/src/lib/takeoff/takeoff-schema"
+  );
+  const items = await queryTakeoffItemsForProject(
+    supabase,
+    projectId,
+    session.profile.organisation_id
+  );
+
+  return { items, error: null as string | null };
+}

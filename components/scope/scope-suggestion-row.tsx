@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 
+import { resolveSuggestionDrawingRef } from "@/components/scope/scope-drawing-references";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -9,106 +10,120 @@ import {
   resolveConfidenceLevel,
 } from "@/src/lib/ai-review/constants";
 import { formatQuantity } from "@/src/lib/format";
-import type { AiReviewItem } from "@/src/types/database";
+import type { AiReviewItem, Document } from "@/src/types/database";
 
 export type ScopeSuggestionRowProps = {
   item: AiReviewItem;
+  documentsById: ReadonlyMap<string, Document>;
   selected: boolean;
   actionPending: boolean;
   onSelect: (itemId: string) => void;
   onAccept: (itemId: string) => void;
+  onAdjust: (itemId: string) => void;
   onReject: (itemId: string) => void;
 };
 
-function CompactConfidence({ confidence }: { confidence: number | null }) {
+function ConfidenceCell({ confidence }: { confidence: number | null }) {
   const level = resolveConfidenceLevel(confidence);
   const label = formatConfidencePercent(confidence);
 
   return (
     <span
       className={cn(
-        "inline-flex w-14 shrink-0 justify-end font-mono text-[10px] tabular-nums",
+        "font-mono text-[10px] tabular-nums",
         level === "high" && "text-emerald-700",
         level === "medium" && "text-amber-800",
-        level === "low" && "text-destructive"
+        level === "low" && "text-destructive",
+        !level && "text-muted-foreground"
       )}
     >
-      {level ? `${label}` : "—"}
+      {level ? label : "—"}
     </span>
   );
 }
 
+
 export const ScopeSuggestionRow = memo(function ScopeSuggestionRow({
   item,
+  documentsById,
   selected,
   actionPending,
   onSelect,
   onAccept,
+  onAdjust,
   onReject,
 }: ScopeSuggestionRowProps) {
-  const level = resolveConfidenceLevel(item.confidence);
+  const drawingRef = resolveSuggestionDrawingRef(item, documentsById);
 
   return (
     <div
       className={cn(
-        "box-border flex h-[5.5rem] max-h-[5.5rem] min-h-[5.5rem] flex-col overflow-hidden rounded-md border px-2.5 py-2",
-        selected
-          ? "border-sky-400/80 bg-sky-50/90 dark:border-sky-500/50 dark:bg-sky-950/30"
-          : "border-border bg-card hover:border-border/80 hover:bg-muted/10"
+        "grid h-8 min-h-8 max-h-8 grid-cols-[3.5rem_1fr_3rem_2.25rem_2.5rem_2rem_auto] items-center gap-1 border-b border-border/60 px-1.5 text-xs",
+        selected && "bg-sky-50/90 dark:bg-sky-950/25"
       )}
     >
       <button
         type="button"
-        className="min-h-0 min-w-0 flex-1 text-left"
+        className="truncate text-left font-medium text-muted-foreground hover:text-foreground"
+        onClick={() => onSelect(item.id)}
+        title={item.trade}
+      >
+        {item.trade}
+      </button>
+      <button
+        type="button"
+        className="min-w-0 truncate text-left text-foreground hover:underline"
+        onClick={() => onSelect(item.id)}
+        title={item.description}
+      >
+        {item.description}
+      </button>
+      <button
+        type="button"
+        className="truncate text-right font-mono tabular-nums text-muted-foreground"
         onClick={() => onSelect(item.id)}
       >
-        <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
-          {item.description}
-        </p>
-        <p className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-          <span className="min-w-0 truncate">{item.trade}</span>
-          <span className="shrink-0" aria-hidden>
-            ·
-          </span>
-          <span className="shrink-0 font-mono tabular-nums">
-            {formatQuantity(item.quantity)} {item.unit}
-          </span>
-          {item.page_number != null ? (
-            <>
-              <span className="shrink-0" aria-hidden>
-                ·
-              </span>
-              <span className="shrink-0 font-mono tabular-nums">
-                p.{item.page_number}
-              </span>
-            </>
-          ) : null}
-          <CompactConfidence confidence={item.confidence} />
-          <span className="sr-only">
-            {level ? `${level} confidence` : "Unknown confidence"}
-          </span>
-        </p>
+        {formatQuantity(item.quantity)}
       </button>
-
-      <div className="mt-1 flex shrink-0 items-center justify-end gap-1.5">
+      <ConfidenceCell confidence={item.confidence} />
+      <span
+        className="truncate font-mono text-[10px] tabular-nums text-muted-foreground"
+        title={drawingRef.drawing_number ?? undefined}
+      >
+        {drawingRef.drawing_number ?? "—"}
+      </span>
+      <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+        {drawingRef.page_number ?? "—"}
+      </span>
+      <div className="flex shrink-0 items-center justify-end gap-0.5">
         <Button
           type="button"
           size="sm"
           variant="ghost"
-          className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+          className="h-6 px-1.5 text-[10px]"
           disabled={actionPending}
           onClick={() => onReject(item.id)}
         >
-          Reject
+          Rej
         </Button>
         <Button
           type="button"
           size="sm"
-          className="h-7 px-3 text-xs"
+          variant="ghost"
+          className="h-6 px-1.5 text-[10px]"
+          disabled={actionPending}
+          onClick={() => onAdjust(item.id)}
+        >
+          Adj
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          className="h-6 px-1.5 text-[10px]"
           disabled={actionPending}
           onClick={() => onAccept(item.id)}
         >
-          Accept
+          Acc
         </Button>
       </div>
     </div>

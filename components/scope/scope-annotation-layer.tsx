@@ -1,16 +1,11 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo } from "react";
 
 import { cn } from "@/lib/utils";
-import {
-  parseOverlayGeometry,
-  tradeColour,
-} from "@/src/lib/ai-review/overlay";
+import { tradeColour } from "@/src/lib/ai-review/overlay";
 import { matchesConfidenceFilter } from "@/src/lib/ai-review/constants";
 import type { AiReviewItem } from "@/src/types/database";
-
-const DENSE_FLAG_THRESHOLD = 10;
 
 function isDimmed(
   item: AiReviewItem,
@@ -34,6 +29,7 @@ type ScopeAnnotationLayerProps = {
   onSelectItem: (itemId: string) => void;
 };
 
+/** Right-edge numbered markers for suggestions on the active page (no bbox overlays). */
 export const ScopeAnnotationLayer = memo(function ScopeAnnotationLayer({
   pageAnnotations,
   selectedItemId,
@@ -41,81 +37,14 @@ export const ScopeAnnotationLayer = memo(function ScopeAnnotationLayer({
   confidenceFilter,
   onSelectItem,
 }: ScopeAnnotationLayerProps) {
-  const positionedItems = useMemo(
-    () =>
-      pageAnnotations.filter(
-        (item) => parseOverlayGeometry(item.overlay_geometry) !== null
-      ),
-    [pageAnnotations]
-  );
-
-  const stackedItems = useMemo(
-    () =>
-      pageAnnotations.filter(
-        (item) => parseOverlayGeometry(item.overlay_geometry) === null
-      ),
-    [pageAnnotations]
-  );
-
-  const useCompactFlags = pageAnnotations.length > DENSE_FLAG_THRESHOLD;
-
   if (pageAnnotations.length === 0) {
     return null;
   }
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10">
-      {!useCompactFlags
-        ? positionedItems.map((item) => {
-            const geometry = parseOverlayGeometry(item.overlay_geometry);
-            if (!geometry || geometry.type !== "bbox") {
-              return null;
-            }
-            const selected = item.id === selectedItemId;
-            const dimmed = isDimmed(item, tradeFilter, confidenceFilter);
-            const colour = tradeColour(item.trade);
-
-            if (!selected) {
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  title={item.description}
-                  className={cn(
-                    "pointer-events-auto absolute size-2.5 rounded-full border shadow-sm transition-transform hover:scale-125",
-                    dimmed && "opacity-20"
-                  )}
-                  style={{
-                    left: `${(geometry.x + geometry.width / 2) * 100}%`,
-                    top: `${(geometry.y + geometry.height / 2) * 100}%`,
-                    borderColor: colour,
-                    backgroundColor: colour,
-                  }}
-                  onClick={() => onSelectItem(item.id)}
-                />
-              );
-            }
-
-            return (
-              <div key={item.id}>
-                <div
-                  className={cn("absolute border-2", dimmed && "opacity-20")}
-                  style={{
-                    left: `${geometry.x * 100}%`,
-                    top: `${geometry.y * 100}%`,
-                    width: `${geometry.width * 100}%`,
-                    height: `${geometry.height * 100}%`,
-                    borderColor: colour,
-                    backgroundColor: `${colour}1A`,
-                  }}
-                />
-              </div>
-            );
-          })
-        : null}
-
-      <div className="absolute right-2 top-2 flex max-h-[70%] flex-col flex-wrap gap-1 overflow-hidden">
-        {(useCompactFlags ? pageAnnotations : stackedItems).map((item, index) => {
+      <div className="absolute right-2 top-2 flex max-h-[85%] flex-col gap-1 overflow-hidden">
+        {pageAnnotations.map((item, index) => {
           const selected = item.id === selectedItemId;
           const dimmed = isDimmed(item, tradeFilter, confidenceFilter);
           const colour = tradeColour(item.trade);
@@ -127,28 +56,18 @@ export const ScopeAnnotationLayer = memo(function ScopeAnnotationLayer({
               title={item.description}
               className={cn(
                 "pointer-events-auto flex items-center justify-center rounded-full border font-mono font-semibold shadow-sm transition-all",
-                useCompactFlags
-                  ? selected
-                    ? "size-6 border-2 text-[10px]"
-                    : "size-4 text-[8px]"
-                  : selected
-                    ? "size-6 border-2 text-[10px]"
-                    : "size-3.5 border",
-                selected && "ring-2 ring-primary/25",
-                dimmed && "opacity-20"
+                selected ? "size-6 border-2 text-[10px]" : "size-4 text-[9px]",
+                selected && "ring-2 ring-primary/30",
+                dimmed && "opacity-25"
               )}
               style={{
                 borderColor: colour,
-                backgroundColor: selected ? colour : `${colour}33`,
+                backgroundColor: selected ? colour : `${colour}40`,
                 color: selected ? "white" : colour,
               }}
               onClick={() => onSelectItem(item.id)}
             >
-              {useCompactFlags ? (
-                <span>{index + 1}</span>
-              ) : (
-                <span className="sr-only">{item.trade}</span>
-              )}
+              {index + 1}
             </button>
           );
         })}

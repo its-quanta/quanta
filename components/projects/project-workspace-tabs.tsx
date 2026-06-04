@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { useGlobalCommand } from "@/components/command-palette/global-command-provider";
+import { cn } from "@/lib/utils";
 import { TakeoffRelationshipsProvider } from "@/components/takeoff/takeoff-relationships-context";
 import { buildProjectCommandIndex } from "@/src/lib/command/build-project-index";
 import { BuildUpPanel } from "@/components/projects/build-up-panel";
@@ -224,8 +225,6 @@ export function ProjectWorkspaceTabs({
     [aiReviewItems]
   );
 
-  const isScopeTab = activeTab === "scope";
-
   return (
     <>
       <TakeoffRelationshipsProvider
@@ -283,16 +282,10 @@ export function ProjectWorkspaceTabs({
             />
           </TabsContent>
 
-          <TabsContent
-            value="scope"
-            className={
-              isScopeTab
-                ? "mt-0 h-[calc(100vh-12.5rem)] min-h-0 overflow-hidden data-[state=inactive]:hidden"
-                : undefined
-            }
-          >
+          <TabsContent value="scope">
             <AiReviewPanel
               projectId={project.id}
+              projectName={project.name}
               items={aiReviewItems}
               documents={documents}
               documentPages={documentPages}

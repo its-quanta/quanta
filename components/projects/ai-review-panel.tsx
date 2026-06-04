@@ -15,6 +15,7 @@ import type {
 
 type AiReviewPanelProps = {
   projectId: string;
+  projectName: string;
   items: AiReviewItem[];
   documents: Document[];
   documentPages: DocumentPage[];
@@ -28,6 +29,7 @@ type AiReviewPanelProps = {
 
 export function AiReviewPanel({
   projectId,
+  projectName,
   items,
   documents,
   documentPages,
@@ -39,19 +41,18 @@ export function AiReviewPanel({
   pricingItems,
 }: AiReviewPanelProps) {
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <ScopeWorkspace
-        projectId={projectId}
-        aiReviewItems={items}
-        documents={documents}
-        documentPages={documentPages}
-        takeoffItems={takeoffItems}
-        takeoffAssemblies={takeoffAssemblies}
-        assemblyPackages={assemblyPackages}
-        materialItems={materialItems}
-        labourItems={labourItems}
-        pricingItems={pricingItems}
-      />
-    </div>
+    <ScopeWorkspace
+      projectId={projectId}
+      projectName={projectName}
+      aiReviewItems={items}
+      documents={documents}
+      documentPages={documentPages}
+      takeoffItems={takeoffItems}
+      takeoffAssemblies={takeoffAssemblies}
+      assemblyPackages={assemblyPackages}
+      materialItems={materialItems}
+      labourItems={labourItems}
+      pricingItems={pricingItems}
+    />
   );
 }

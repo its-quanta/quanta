@@ -2,11 +2,13 @@
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { ScopePanelMode } from "@/components/scope/scope-panel-mode";
 import type { AiReviewItem } from "@/src/types/database";
 
 type ScopeStatusBarProps = {
   items: AiReviewItem[];
   takeoffCount: number;
+  panelMode?: ScopePanelMode;
   undoLabel?: string | null;
   onUndo?: () => void;
   className?: string;
@@ -15,6 +17,7 @@ type ScopeStatusBarProps = {
 export function ScopeStatusBar({
   items,
   takeoffCount,
+  panelMode = "suggestions",
   undoLabel,
   onUndo,
   className,
@@ -65,7 +68,9 @@ export function ScopeStatusBar({
           </div>
         ) : null}
         <span className="hidden text-muted-foreground xl:inline">
-          Click a flag to review · Accept and reject update instantly
+          {panelMode === "takeoff"
+            ? "Click a line to jump to its drawing page"
+            : "Click a flag to review · Accept and reject update instantly"}
         </span>
         <span className="font-mono tabular-nums text-muted-foreground">
           Takeoff {takeoffCount}

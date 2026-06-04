@@ -54,10 +54,16 @@ export const ScopeAnnotationCallout = memo(function ScopeAnnotationCallout({
           className="h-5 shrink-0 px-1.5 text-[9px]"
         />
       </p>
-      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-        {item.page_number != null ? `p.${item.page_number}` : "—"}
+      <p className="mt-0.5 text-[11px] text-muted-foreground">
+        {item.page_number != null ? (
+          <span className="font-medium text-foreground">
+            Linked to page {item.page_number}
+          </span>
+        ) : (
+          <span>No page linked</span>
+        )}
         {" · "}
-        {sourceName}
+        <span className="truncate">{sourceName}</span>
       </p>
 
       {reasoning ? (
