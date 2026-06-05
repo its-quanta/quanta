@@ -23,6 +23,8 @@ type DetailLabourSectionProps = {
   projectId: string;
   takeoffItemId: string;
   labourItems: ProjectLabourItem[];
+  onOptimisticRemove?: (itemId: string) => void;
+  onLineRemoved?: () => void;
   onError?: (message: string) => void;
   className?: string;
 };
@@ -31,6 +33,8 @@ export function DetailLabourSection({
   projectId,
   takeoffItemId,
   labourItems,
+  onOptimisticRemove,
+  onLineRemoved,
   onError,
   className,
 }: DetailLabourSectionProps) {
@@ -93,6 +97,8 @@ export function DetailLabourSection({
                     itemId={line.id}
                     ariaLabel={`Remove labour line ${line.labour_name}`}
                     onRemove={deleteProjectLabourItemsAction}
+                    onOptimisticRemove={onOptimisticRemove}
+                    onRemoved={onLineRemoved}
                     onError={onError}
                   />
                 </div>

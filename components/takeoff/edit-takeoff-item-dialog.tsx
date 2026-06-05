@@ -48,7 +48,7 @@ export function EditTakeoffItemDialog({
 
   useEffect(() => {
     if (open && item) {
-      setForm(takeoffItemToFormValues(item));
+      setForm(takeoffItemToFormValues(item, undefined, undefined, documentPages));
       setErrorMessage(null);
     }
   }, [open, item]);
@@ -88,7 +88,6 @@ export function EditTakeoffItemDialog({
         specification_reference: parsed.data!.specification_reference,
         notes: parsed.data!.notes,
         source_document_id: parsed.data!.source_document_id,
-        document_page_id: parsed.data!.document_page_id,
         status: parsed.data!.status,
       });
 

@@ -4,12 +4,16 @@ import { useMemo } from "react";
 
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatPercent } from "@/src/lib/format";
+import { calculateEstimateItemPricing } from "@/src/lib/estimate/item-pricing";
 import {
   deriveItemStatus,
   type EstimateItemStatus,
 } from "@/src/lib/estimate/item-status";
 import type {
+  AssemblyPackage,
   PricingItem,
+  ProjectLabourItem,
+  ProjectMaterialItem,
   TakeoffItem,
   TakeoffItemAssemblyWithPackage,
 } from "@/src/types/database";
@@ -18,6 +22,9 @@ type EstimateSummaryStripProps = {
   takeoffItems: TakeoffItem[];
   takeoffAssemblies: TakeoffItemAssemblyWithPackage[];
   pricingItems: PricingItem[];
+  materialItems: ProjectMaterialItem[];
+  labourItems: ProjectLabourItem[];
+  assemblyPackages: AssemblyPackage[];
   onFilterStatus: (status: EstimateItemStatus | null) => void;
   activeStatusFilter: EstimateItemStatus | null;
 };
@@ -26,6 +33,9 @@ export function EstimateSummaryStrip({
   takeoffItems,
   takeoffAssemblies,
   pricingItems,
+  materialItems,
+  labourItems,
+  assemblyPackages,
   onFilterStatus,
   activeStatusFilter,
 }: EstimateSummaryStripProps) {
@@ -50,6 +60,14 @@ export function EstimateSummaryStrip({
     [takeoffItems]
   );
 
+  const packageById = useMemo(() => {
+    const map = new Map<string, AssemblyPackage>();
+    for (const pkg of assemblyPackages) {
+      map.set(pkg.id, pkg);
+    }
+    return map;
+  }, [assemblyPackages]);
+
   const counts = useMemo(() => {
     const result = {
       no_package: 0,
@@ -59,10 +77,28 @@ export function EstimateSummaryStrip({
     };
 
     for (const item of priceableItems) {
+      const assembly = assemblyByTakeoffId.get(item.id);
+      const pricing = pricingByTakeoffId.get(item.id);
+      const appliedPackage = assembly
+        ? (packageById.get(assembly.assembly_package_id) ?? null)
+        : null;
+      const calculated = calculateEstimateItemPricing({
+        takeoffItem: item,
+        materialItems,
+        labourItems,
+        pricingItem: pricing ?? null,
+        packageAssembly: assembly ?? null,
+        appliedPackage,
+      });
       const status = deriveItemStatus(
         item,
-        assemblyByTakeoffId.get(item.id),
-        pricingByTakeoffId.get(item.id)
+        assembly,
+        pricing,
+        {
+          totalCost: calculated.totalCost,
+          totalSell: calculated.totalSell,
+          sellRate: calculated.sellRate,
+        }
       );
       if (status === "no_package") {
         result.no_package += 1;
@@ -76,7 +112,14 @@ export function EstimateSummaryStrip({
     }
 
     return result;
-  }, [priceableItems, assemblyByTakeoffId, pricingByTakeoffId]);
+  }, [
+    priceableItems,
+    assemblyByTakeoffId,
+    pricingByTakeoffId,
+    packageById,
+    materialItems,
+    labourItems,
+  ]);
 
   const totals = useMemo(() => {
     let cost = 0;
@@ -84,13 +127,31 @@ export function EstimateSummaryStrip({
     let hasCost = false;
     let hasSell = false;
 
-    for (const pricing of pricingItems) {
-      if (pricing.total_cost != null) {
-        cost += pricing.total_cost;
+    for (const item of priceableItems) {
+      const assembly = assemblyByTakeoffId.get(item.id);
+      const pricing = pricingByTakeoffId.get(item.id);
+      if (!assembly && !pricing) {
+        continue;
+      }
+
+      const appliedPackage = assembly
+        ? (packageById.get(assembly.assembly_package_id) ?? null)
+        : null;
+      const calculated = calculateEstimateItemPricing({
+        takeoffItem: item,
+        materialItems,
+        labourItems,
+        pricingItem: pricing ?? null,
+        packageAssembly: assembly ?? null,
+        appliedPackage,
+      });
+
+      if (calculated.totalCost > 0 || pricing) {
+        cost += calculated.totalCost;
         hasCost = true;
       }
-      if (pricing.total_sell != null) {
-        sell += pricing.total_sell;
+      if (calculated.totalSell > 0) {
+        sell += calculated.totalSell;
         hasSell = true;
       }
     }
@@ -103,7 +164,14 @@ export function EstimateSummaryStrip({
       sell: hasSell ? sell : null,
       marginPercent,
     };
-  }, [pricingItems]);
+  }, [
+    priceableItems,
+    assemblyByTakeoffId,
+    pricingByTakeoffId,
+    packageById,
+    materialItems,
+    labourItems,
+  ]);
 
   function toggleFilter(status: EstimateItemStatus) {
     onFilterStatus(activeStatusFilter === status ? null : status);

@@ -328,6 +328,26 @@ export async function insertTakeoffItemWithFallback(
   return { itemId: null, error: lastError };
 }
 
+function stripMissingUpdateColumn(
+  payload: Record<string, unknown>,
+  errorMessage: string
+): Record<string, unknown> | null {
+  const schemaCacheMatch = errorMessage.match(
+    /Could not find the '([^']+)' column of/i
+  );
+  const postgresMatch = errorMessage.match(/column ([^\s]+) does not exist/i);
+  const missingColumn = schemaCacheMatch?.[1] ?? postgresMatch?.[1];
+
+  if (!missingColumn || !(missingColumn in payload)) {
+    return null;
+  }
+
+  const { [missingColumn]: _removed, ...nextPayload } = payload;
+  void _removed;
+
+  return nextPayload;
+}
+
 export async function updateTakeoffItemWithFallback(
   supabase: SupabaseClient,
   itemId: string,
@@ -335,23 +355,38 @@ export async function updateTakeoffItemWithFallback(
   organisationId: string,
   payload: Record<string, unknown>
 ): Promise<{ error: string | null }> {
-  const { error } = await supabase
-    .from("takeoff_items")
-    .update(payload)
-    .eq("id", itemId)
-    .eq("project_id", projectId)
-    .eq("organisation_id", organisationId);
+  let attemptPayload: Record<string, unknown> = { ...payload };
+  let lastError: string | null = null;
 
-  if (!error) {
-    return { error: null };
-  }
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const { error } = await supabase
+      .from("takeoff_items")
+      .update(attemptPayload)
+      .eq("id", itemId)
+      .eq("project_id", projectId)
+      .eq("organisation_id", organisationId);
 
-  if (!isMissingColumnError(error.message)) {
-    return { error: error.message };
+    if (!error) {
+      return { error: null };
+    }
+
+    lastError = error.message;
+
+    if (!isMissingColumnError(error.message)) {
+      return { error: error.message };
+    }
+
+    const nextPayload = stripMissingUpdateColumn(attemptPayload, error.message);
+
+    if (!nextPayload) {
+      break;
+    }
+
+    attemptPayload = nextPayload;
   }
 
   const { sort_order, trade, item_name, status, reviewed, ai_generated, ...legacyPayload } =
-    payload;
+    attemptPayload;
 
   void sort_order;
   void trade;

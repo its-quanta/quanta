@@ -52,7 +52,12 @@ export function EstimatePackageColumnCell({
 
   if (display.kind === "none") {
     return (
-      <span className={cn("text-xs text-amber-800", className)}>
+      <span
+        className={cn(
+          "inline-flex rounded-md border border-slate-500/25 bg-slate-500/5 px-1.5 py-0.5 text-xs font-medium text-slate-600",
+          className
+        )}
+      >
         {display.label}
       </span>
     );

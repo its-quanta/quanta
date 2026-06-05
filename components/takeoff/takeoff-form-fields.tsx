@@ -86,7 +86,6 @@ export function parseTakeoffFormValues(
     detail_reference: string | null;
     specification_reference: string | null;
     source_document_id: string | null;
-    document_page_id: string | null;
     notes: string | null;
     status: TakeoffItemStatus;
   };
@@ -147,7 +146,6 @@ export function parseTakeoffFormValues(
       detail_reference: form.detail_reference.trim() || null,
       specification_reference: form.specification_reference.trim() || null,
       source_document_id: sourceDocumentId,
-      document_page_id: documentPageId,
       notes: form.notes.trim() || null,
       status: form.status,
     },
@@ -173,10 +171,21 @@ export function takeoffItemToFormValues(
     | "status"
   >,
   trades: readonly string[] = TAKEOFF_TRADES,
-  units: readonly string[] = TAKEOFF_UNITS
+  units: readonly string[] = TAKEOFF_UNITS,
+  documentPages: DocumentPage[] = []
 ): TakeoffFormValues {
   const tradeInList = trades.includes(item.trade as (typeof trades)[number]);
   const unitInList = units.includes(item.unit as (typeof units)[number]);
+
+  const resolvedDocumentPageId =
+    item.document_page_id ??
+    (item.source_document_id && item.page_number != null
+      ? (documentPages.find(
+          (page) =>
+            page.document_id === item.source_document_id &&
+            page.page_number === item.page_number
+        )?.id ?? "")
+      : "");
 
   return {
     trade: tradeInList ? item.trade : "Other",
@@ -196,7 +205,7 @@ export function takeoffItemToFormValues(
     specification_reference: item.specification_reference ?? "",
     notes: item.notes ?? "",
     source_document_id: item.source_document_id ?? "",
-    document_page_id: item.document_page_id ?? "",
+    document_page_id: resolvedDocumentPageId,
     status: item.status === "ai_draft" ? "draft" : item.status,
   };
 }

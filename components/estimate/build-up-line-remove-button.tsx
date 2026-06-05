@@ -11,6 +11,7 @@ type BuildUpLineRemoveButtonProps = {
   ariaLabel: string;
   onRemove: (projectId: string, itemIds: string[]) => Promise<{ error?: string }>;
   itemId: string;
+  onOptimisticRemove?: (itemId: string) => void;
   onRemoved?: () => void;
   onError?: (message: string) => void;
   className?: string;
@@ -21,6 +22,7 @@ export function BuildUpLineRemoveButton({
   ariaLabel,
   onRemove,
   itemId,
+  onOptimisticRemove,
   onRemoved,
   onError,
   className,
@@ -43,6 +45,7 @@ export function BuildUpLineRemoveButton({
         return;
       }
 
+      onOptimisticRemove?.(itemId);
       dispatchEstimateUpdated(projectId);
       onRemoved?.();
     });

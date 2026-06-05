@@ -18,12 +18,15 @@ import { formatCurrency, formatPercent } from "@/src/lib/format";
 import {
   buildPricingFormNumbers,
   deriveDefaultSellRate,
-  derivePackageCostRate,
   methodLabelForMode,
   pricingMethodForMode,
   resolveEstimatePricingMode,
   type EstimatePricingModeOverride,
 } from "@/src/lib/estimate/pricing-derivation";
+import {
+  calculateEstimateItemPricing,
+  pricingTotalsNeedSync,
+} from "@/src/lib/estimate/item-pricing";
 import {
   createPricingItemAction,
   updatePricingItemAction,
@@ -53,7 +56,7 @@ type DetailPricingSectionProps = {
   className?: string;
 };
 
-type SaveState = "idle" | "saving" | "saved" | "error";
+type SaveState = "idle" | "saving" | "saved" | "updated" | "error";
 
 type LastEdited = "cost_rate" | "sell_rate" | "total_cost" | "total_sell" | null;
 
@@ -104,25 +107,27 @@ export function DetailPricingSection({
 
   const mode = resolveEstimatePricingMode(assembly, pricing, modeOverride);
 
-  const derivedCostRate = useMemo(
+  const calculated = useMemo(
     () =>
-      derivePackageCostRate({
+      calculateEstimateItemPricing({
         takeoffItem,
-        assembly,
-        appliedPackage,
-        pricing,
         materialItems,
         labourItems,
+        pricingItem: pricing,
+        packageAssembly: assembly,
+        appliedPackage,
       }),
     [
       takeoffItem,
-      assembly,
-      appliedPackage,
-      pricing,
       materialItems,
       labourItems,
+      pricing,
+      assembly,
+      appliedPackage,
     ]
   );
+
+  const derivedCostRate = calculated.costRate;
 
   const [costRateInput, setCostRateInput] = useState("");
   const [sellRateInput, setSellRateInput] = useState("");
@@ -133,21 +138,29 @@ export function DetailPricingSection({
     const quantity = takeoffItem.quantity;
     const costRate =
       mode === "package"
-        ? derivedCostRate
+        ? calculated.costRate
         : (pricing?.cost_rate ?? 0);
     const defaultSell = deriveDefaultSellRate({ pricing, appliedPackage });
     const sellRate =
       mode === "package"
-        ? (defaultSell ?? 0)
-        : (pricing?.sell_rate ?? 0);
+        ? calculated.sellRate
+        : (pricing?.sell_rate ?? defaultSell ?? 0);
 
-    const numbers = buildPricingFormNumbers({
-      quantity,
-      cost_rate: costRate,
-      sell_rate: sellRate,
-      sell_rate_overridden:
-        mode === "package" ? true : (pricing?.sell_rate_overridden ?? false),
-    });
+    const numbers =
+      mode === "package"
+        ? {
+            cost_rate: calculated.costRate,
+            sell_rate: calculated.sellRate,
+            total_cost: calculated.totalCost,
+            total_sell: calculated.totalSell,
+          }
+        : buildPricingFormNumbers({
+            quantity,
+            cost_rate: costRate,
+            sell_rate: sellRate,
+            sell_rate_overridden:
+              pricing?.sell_rate_overridden ?? false,
+          });
 
     setCostRateInput(formatRateValue(numbers.cost_rate));
     setSellRateInput(formatRateValue(numbers.sell_rate));
@@ -159,7 +172,7 @@ export function DetailPricingSection({
   }, [
     takeoffItem.quantity,
     mode,
-    derivedCostRate,
+    calculated,
     pricing,
     appliedPackage,
   ]);
@@ -167,7 +180,18 @@ export function DetailPricingSection({
   useEffect(() => {
     syncFormFromSource();
     ensuredMethodRef.current = null;
-  }, [syncFormFromSource, takeoffItem.id, pricing?.id, pricing?.updated_at]);
+  }, [
+    syncFormFromSource,
+    takeoffItem.id,
+    takeoffItem.quantity,
+    takeoffItem.unit,
+    pricing?.id,
+    pricing?.updated_at,
+    materialItems,
+    labourItems,
+    calculated.totalCost,
+    calculated.costRate,
+  ]);
 
   useEffect(() => {
     if (focusSellRate && sellRateRef.current) {
@@ -180,10 +204,22 @@ export function DetailPricingSection({
   const unit = takeoffItem.unit?.trim() || "each";
 
   const liveNumbers = useMemo(() => {
-    const costRate =
-      mode === "package"
-        ? derivedCostRate
-        : (parseInputNumber(costRateInput) ?? 0);
+    if (mode === "package") {
+      return {
+        quantity,
+        unit: "",
+        cost_rate: calculated.costRate,
+        sell_rate: calculated.sellRate,
+        sell_rate_overridden:
+          pricing?.sell_rate_overridden ?? calculated.sellRate > 0,
+        total_cost: calculated.totalCost,
+        total_sell: calculated.totalSell,
+        gross_profit: calculated.grossProfit,
+        margin_percentage: calculated.marginPercent,
+      };
+    }
+
+    const costRate = parseInputNumber(costRateInput) ?? 0;
     const sellRate = parseInputNumber(sellRateInput) ?? 0;
     const totalCost = parseInputNumber(totalCostInput);
     const totalSell = parseInputNumber(totalSellInput);
@@ -193,7 +229,6 @@ export function DetailPricingSection({
       cost_rate: costRate,
       sell_rate: sellRate,
       sell_rate_overridden:
-        mode === "package" ||
         lastEdited === "sell_rate" ||
         lastEdited === "total_sell" ||
         (pricing?.sell_rate_overridden ?? false),
@@ -203,7 +238,7 @@ export function DetailPricingSection({
     });
   }, [
     mode,
-    derivedCostRate,
+    calculated,
     costRateInput,
     sellRateInput,
     totalCostInput,
@@ -223,6 +258,63 @@ export function DetailPricingSection({
     setTotalCostInput(formatMoneyInput(liveNumbers.total_cost));
     setTotalSellInput(formatMoneyInput(liveNumbers.total_sell));
   }, [mode, liveNumbers.total_cost, liveNumbers.total_sell, lastEdited]);
+
+  const syncBuildUpPricingRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (mode !== "package" || !pricing?.id) {
+      return;
+    }
+
+    if (!pricingTotalsNeedSync(calculated, pricing, quantity)) {
+      return;
+    }
+
+    const syncKey = `${pricing.id}:${calculated.totalCost}:${calculated.costRate}:${quantity}`;
+    if (syncBuildUpPricingRef.current === syncKey) {
+      return;
+    }
+    syncBuildUpPricingRef.current = syncKey;
+
+    setSaveState("saving");
+    setSaveError(null);
+
+    startTransition(async () => {
+      const payload = {
+        pricing_method: pricing.pricing_method,
+        quantity,
+        unit,
+        cost_rate: calculated.costRate,
+        sell_rate: calculated.sellRate,
+        sell_rate_overridden: pricing.sell_rate_overridden,
+        margin_percentage: calculated.marginPercent,
+        markup_percentage: null as number | null,
+        notes: pricing.notes ?? null,
+      };
+
+      const result = await updatePricingItemAction(pricing.id, projectId, payload);
+
+      if (result.error) {
+        syncBuildUpPricingRef.current = null;
+        setSaveState("error");
+        setSaveError(result.error);
+        onError(result.error);
+        return;
+      }
+
+      dispatchEstimateUpdated(projectId);
+      setSaveState("updated");
+      window.setTimeout(() => setSaveState("idle"), 2000);
+    });
+  }, [
+    mode,
+    pricing,
+    calculated,
+    quantity,
+    unit,
+    projectId,
+    onError,
+  ]);
 
   const persistPricing = useCallback(
     (options?: { silent?: boolean }) => {
@@ -415,14 +507,26 @@ export function DetailPricingSection({
           onKeyDown={handleFieldKeyDown}
         />
         <PricingField
-          ref={mode === "package" || mode === "manual" ? sellRateRef : undefined}
+          ref={
+            mode === "package" || mode === "manual" || mode === "quote"
+              ? sellRateRef
+              : undefined
+          }
           label={`Sell rate / ${unit}`}
-          value={sellRateInput}
+          value={mode === "package" ? formatRateValue(calculated.sellRate) : sellRateInput}
+          displayValue={
+            mode === "package" ? formatCurrency(calculated.sellRate) : undefined
+          }
+          readOnly={mode === "package"}
           onChange={(value) => {
             setLastEdited("sell_rate");
             setSellRateInput(value);
           }}
-          onBlur={() => persistPricing()}
+          onBlur={() => {
+            if (mode !== "package") {
+              persistPricing();
+            }
+          }}
           onKeyDown={handleFieldKeyDown}
         />
         <PricingField
@@ -489,14 +593,14 @@ export function DetailPricingSection({
         </div>
       </div>
 
-      {mode === "quote" ? (
+      {mode === "quote" || mode === "allowance" || mode === "manual" ? (
         <p className="text-xs text-muted-foreground">
-          Enter quote cost as cost rate and confirmed sell as sell rate or totals.
-        </p>
-      ) : null}
-      {mode === "allowance" ? (
-        <p className="text-xs text-muted-foreground">
-          Enter the allowance amount as cost; set sell to your charge-out value.
+          Enter cost and sell values for this item.
+          {mode === "quote"
+            ? " Use cost rate for the quote amount and sell rate for your charge-out."
+            : mode === "allowance"
+              ? " Set cost to the allowance and sell to your charge-out value."
+              : null}
         </p>
       ) : null}
     </section>
@@ -539,7 +643,8 @@ const PricingField = forwardRef<
         min={0}
         step="any"
         value={value}
-        className="h-8 font-mono text-sm tabular-nums"
+        placeholder="0"
+        className="h-8 border-input bg-background font-mono text-sm tabular-nums"
         onChange={(event) => onChange?.(event.target.value)}
         onBlur={onBlur}
         onKeyDown={onKeyDown}
@@ -569,6 +674,9 @@ function SaveIndicator({
   }
   if (state === "saved") {
     return <span className="text-xs text-emerald-700">Saved</span>;
+  }
+  if (state === "updated") {
+    return <span className="text-xs text-emerald-700">Updated</span>;
   }
   return null;
 }

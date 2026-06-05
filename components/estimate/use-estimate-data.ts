@@ -50,6 +50,14 @@ export function useEstimateData(
     return result;
   }, [projectId]);
 
+  const optimisticRemoveMaterial = useCallback((itemId: string) => {
+    setMaterialItems((current) => current.filter((row) => row.id !== itemId));
+  }, []);
+
+  const optimisticRemoveLabour = useCallback((itemId: string) => {
+    setLabourItems((current) => current.filter((row) => row.id !== itemId));
+  }, []);
+
   useEffect(() => {
     const handleUpdated = (event: Event) => {
       const detail = (event as CustomEvent<{ projectId?: string }>).detail;
@@ -71,5 +79,7 @@ export function useEstimateData(
     materialItems,
     labourItems,
     refresh,
+    optimisticRemoveMaterial,
+    optimisticRemoveLabour,
   };
 }

@@ -24,6 +24,7 @@ import {
   deriveRowMarginPercent,
   type EstimateItemStatus,
 } from "@/src/lib/estimate/item-status";
+import { calculateEstimateItemPricing } from "@/src/lib/estimate/item-pricing";
 import {
   getSingleTradePackageMatch,
   hasMultipleTradePackageMatches,
@@ -32,18 +33,25 @@ import { applyAssemblyPackageToTakeoffAction } from "@/src/lib/takeoff-assembly/
 import type {
   AssemblyPackage,
   PricingItem,
+  ProjectLabourItem,
+  ProjectMaterialItem,
   TakeoffItem,
   TakeoffItemAssemblyWithPackage,
 } from "@/src/types/database";
+
+type RowSelection = ReturnType<typeof useRowSelection>;
 
 type EstimateItemTableProps = {
   projectId: string;
   takeoffItems: TakeoffItem[];
   takeoffAssemblies: TakeoffItemAssemblyWithPackage[];
   pricingItems: PricingItem[];
+  materialItems: ProjectMaterialItem[];
+  labourItems: ProjectLabourItem[];
   assemblyPackages: AssemblyPackage[];
   statusFilter: EstimateItemStatus | null;
   selectedItemId: string | null;
+  selection: RowSelection;
   onSelectItem: (
     id: string,
     options?: {
@@ -60,14 +68,16 @@ export function EstimateItemTable({
   takeoffItems,
   takeoffAssemblies,
   pricingItems,
+  materialItems,
+  labourItems,
   assemblyPackages,
   statusFilter,
   selectedItemId,
+  selection,
   onSelectItem,
   onBadgeClick,
   onApplyError,
 }: EstimateItemTableProps) {
-  const selection = useRowSelection();
   const [isApplying, startTransition] = useTransition();
 
   const assemblyByTakeoffId = useMemo(() => {
@@ -93,11 +103,26 @@ export function EstimateItemTable({
         if (!statusFilter) {
           return true;
         }
-        const status = deriveItemStatus(
-          item,
-          assemblyByTakeoffId.get(item.id),
-          pricingByTakeoffId.get(item.id)
-        );
+        const assembly = assemblyByTakeoffId.get(item.id);
+        const pricing = pricingByTakeoffId.get(item.id);
+        const appliedPackage = assembly
+          ? (assemblyPackages.find(
+              (pkg) => pkg.id === assembly.assembly_package_id
+            ) ?? null)
+          : null;
+        const calculated = calculateEstimateItemPricing({
+          takeoffItem: item,
+          materialItems,
+          labourItems,
+          pricingItem: pricing ?? null,
+          packageAssembly: assembly ?? null,
+          appliedPackage,
+        });
+        const status = deriveItemStatus(item, assembly, pricing, {
+          totalCost: calculated.totalCost,
+          totalSell: calculated.totalSell,
+          sellRate: calculated.sellRate,
+        });
         return status === statusFilter;
       });
   }, [
@@ -105,6 +130,9 @@ export function EstimateItemTable({
     statusFilter,
     assemblyByTakeoffId,
     pricingByTakeoffId,
+    materialItems,
+    labourItems,
+    assemblyPackages,
   ]);
 
   const visibleIds = useMemo(
@@ -173,14 +201,34 @@ export function EstimateItemTable({
             {visibleItems.map((item) => {
               const assembly = assemblyByTakeoffId.get(item.id);
               const pricing = pricingByTakeoffId.get(item.id);
-              const status = deriveItemStatus(item, assembly, pricing);
-              const marginPercent = deriveRowMarginPercent(pricing);
-              const isSelected = selectedItemId === item.id;
               const appliedPackage = assembly
                 ? (assemblyPackages.find(
                     (pkg) => pkg.id === assembly.assembly_package_id
                   ) ?? null)
                 : null;
+              const calculated = calculateEstimateItemPricing({
+                takeoffItem: item,
+                materialItems,
+                labourItems,
+                pricingItem: pricing ?? null,
+                packageAssembly: assembly ?? null,
+                appliedPackage,
+              });
+              const status = deriveItemStatus(
+                item,
+                assembly,
+                pricing,
+                {
+                  totalCost: calculated.totalCost,
+                  totalSell: calculated.totalSell,
+                  sellRate: calculated.sellRate,
+                }
+              );
+              const marginPercent = deriveRowMarginPercent(
+                pricing,
+                calculated.marginPercent
+              );
+              const isSelected = selectedItemId === item.id;
               const singleMatch =
                 !assembly && getSingleTradePackageMatch(item, assemblyPackages);
               const multipleMatches =
@@ -264,10 +312,16 @@ export function EstimateItemTable({
                     )}
                   </TableCell>
                   <TableCell className="text-right font-mono tabular-nums">
-                    {formatCurrency(pricing?.total_cost ?? null)}
+                    {formatCurrency(
+                      calculated.totalCost > 0 || pricing
+                        ? calculated.totalCost
+                        : null
+                    )}
                   </TableCell>
                   <TableCell className="text-right font-mono tabular-nums">
-                    {formatCurrency(pricing?.total_sell ?? null)}
+                    {formatCurrency(
+                      calculated.totalSell > 0 ? calculated.totalSell : null
+                    )}
                   </TableCell>
                   <TableCell
                     className={cn(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 
 import { EstimatePackagePicker } from "@/components/estimate/estimate-package-picker";
 import { dispatchEstimateUpdated } from "@/components/estimate/estimate-events";
@@ -12,6 +12,7 @@ import {
   filterMaterialsForTakeoff,
 } from "@/src/lib/estimate/build-up-totals";
 import { formatComponentsSummary } from "@/src/lib/estimate/package-display";
+import { resolveEstimatePricingMode } from "@/src/lib/estimate/pricing-derivation";
 import { fetchEstimateWorkspaceDataAction } from "@/src/lib/estimate/actions";
 import {
   applyAssemblyPackageToTakeoffAction,
@@ -120,6 +121,8 @@ export function DetailPackageSection({
     labourLines.length
   );
 
+  const pricingMode = resolveEstimatePricingMode(assembly, pricing, null);
+
   function handleApplySuccess() {
     setPickerOpen(false);
     onPackageChanged();
@@ -194,53 +197,26 @@ export function DetailPackageSection({
   return (
     <div className={cn("space-y-3", className)}>
       {!assembly ? (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">No package applied</p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="default"
-              onClick={() => setPickerOpen(!pickerOpen)}
-            >
-              {pickerOpen ? "Hide picker" : "Apply package"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={onPriceManually}
-            >
-              Price manually
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={onMarkAsQuote}
-            >
-              Mark as quote
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={onMarkAsAllowance}
-            >
-              Mark as allowance
-            </Button>
-          </div>
-          {pickerOpen ? (
-            <EstimatePackagePicker
-              projectId={projectId}
-              takeoffItem={takeoffItem}
-              assemblyPackages={assemblyPackages}
-              takeoffAssemblies={takeoffAssemblies}
-              onApplied={handleApplySuccess}
-              onError={onError}
-            />
-          ) : null}
-        </div>
+        <AlternativePricingState
+          pricingMode={pricingMode}
+          pickerOpen={pickerOpen}
+          onTogglePicker={() => setPickerOpen(!pickerOpen)}
+          onPriceManually={onPriceManually}
+          onMarkAsQuote={onMarkAsQuote}
+          onMarkAsAllowance={onMarkAsAllowance}
+          picker={
+            pickerOpen ? (
+              <EstimatePackagePicker
+                projectId={projectId}
+                takeoffItem={takeoffItem}
+                assemblyPackages={assemblyPackages}
+                takeoffAssemblies={takeoffAssemblies}
+                onApplied={handleApplySuccess}
+                onError={onError}
+              />
+            ) : null
+          }
+        />
       ) : (
         <div className="space-y-3">
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
@@ -313,6 +289,100 @@ export function DetailPackageSection({
           ) : null}
         </div>
       )}
+    </div>
+  );
+}
+
+function AlternativePricingState({
+  pricingMode,
+  pickerOpen,
+  onTogglePicker,
+  onPriceManually,
+  onMarkAsQuote,
+  onMarkAsAllowance,
+  picker,
+}: {
+  pricingMode: ReturnType<typeof resolveEstimatePricingMode>;
+  pickerOpen: boolean;
+  onTogglePicker: () => void;
+  onPriceManually?: () => void;
+  onMarkAsQuote?: () => void;
+  onMarkAsAllowance?: () => void;
+  picker: ReactNode;
+}) {
+  if (pricingMode === "quote") {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm font-medium text-blue-900">
+          Marked as subcontractor quote
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={onMarkAsQuote}>
+            Change method
+          </Button>
+          <Button type="button" size="sm" variant="default" onClick={onTogglePicker}>
+            {pickerOpen ? "Hide picker" : "Apply package instead"}
+          </Button>
+        </div>
+        {picker}
+      </div>
+    );
+  }
+
+  if (pricingMode === "allowance") {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm font-medium text-violet-900">Marked as allowance</p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onMarkAsAllowance}
+          >
+            Change method
+          </Button>
+          <Button type="button" size="sm" variant="default" onClick={onTogglePicker}>
+            {pickerOpen ? "Hide picker" : "Apply package instead"}
+          </Button>
+        </div>
+        {picker}
+      </div>
+    );
+  }
+
+  if (pricingMode === "manual") {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm font-medium text-slate-800">Manual pricing</p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="default" onClick={onTogglePicker}>
+            {pickerOpen ? "Hide picker" : "Apply package instead"}
+          </Button>
+        </div>
+        {picker}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">No package applied</p>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant="default" onClick={onTogglePicker}>
+          {pickerOpen ? "Hide picker" : "Apply package"}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onPriceManually}>
+          Price manually
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onMarkAsQuote}>
+          Mark as quote
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onMarkAsAllowance}>
+          Mark as allowance
+        </Button>
+      </div>
+      {picker}
     </div>
   );
 }

@@ -6,10 +6,12 @@ import {
   DetailPackageSection,
   type DetailPanelSection,
 } from "@/components/estimate/detail-package-section";
+import { DetailItemEditForm } from "@/components/estimate/detail-item-edit-form";
 import { DetailLabourSection } from "@/components/estimate/detail-labour-section";
 import { DetailMaterialsSection } from "@/components/estimate/detail-materials-section";
 import { DetailPricingSection } from "@/components/estimate/detail-pricing-section";
 import { DetailSourceSection } from "@/components/estimate/detail-source-section";
+import { dispatchEstimateUpdated } from "@/components/estimate/estimate-events";
 import { EstimateCollapsibleSection } from "@/components/estimate/estimate-collapsible-section";
 import { EstimateStatusBadge } from "@/components/estimate/estimate-status-badge";
 import { Button } from "@/components/ui/button";
@@ -17,13 +19,23 @@ import { cn } from "@/lib/utils";
 import { formatCurrency, formatQuantity } from "@/src/lib/format";
 import { computeBuildUpTotals } from "@/src/lib/estimate/build-up-totals";
 import {
+  calculateEstimateItemPricing,
+  pricingTotalsNeedSync,
+} from "@/src/lib/estimate/item-pricing";
+import {
   deriveItemStatus,
   type EstimateItemStatus,
 } from "@/src/lib/estimate/item-status";
+import {
+  methodLabelForMode,
+  resolveEstimatePricingMode,
+} from "@/src/lib/estimate/pricing-derivation";
 import type { EstimatePricingModeOverride } from "@/src/lib/estimate/pricing-derivation";
+import { updatePricingItemAction } from "@/src/lib/pricing/actions";
 import type {
   AssemblyPackage,
   Document,
+  DocumentPage,
   PricingItem,
   ProjectLabourItem,
   ProjectMaterialItem,
@@ -41,11 +53,15 @@ type EstimateDetailPanelProps = {
   materialItems: ProjectMaterialItem[];
   labourItems: ProjectLabourItem[];
   documents: Document[];
+  documentPages: DocumentPage[];
   focusSection?: DetailPanelSection | null;
   packagePickerOpen?: boolean;
   onPackagePickerOpenChange?: (open: boolean) => void;
   onPackageChanged: () => void;
   onPricingSaved: () => void;
+  onTakeoffItemSaved: (item: TakeoffItem) => void;
+  onOptimisticRemoveMaterial: (lineId: string) => void;
+  onOptimisticRemoveLabour: (lineId: string) => void;
   onViewInScope?: () => void;
   onToast: (message: string, options?: { undo?: () => void }) => void;
   onError: (message: string) => void;
@@ -63,11 +79,15 @@ export function EstimateDetailPanel({
   materialItems,
   labourItems,
   documents,
+  documentPages,
   focusSection,
   packagePickerOpen,
   onPackagePickerOpenChange,
   onPackageChanged,
   onPricingSaved,
+  onTakeoffItemSaved,
+  onOptimisticRemoveMaterial,
+  onOptimisticRemoveLabour,
   onViewInScope,
   onToast,
   onError,
@@ -77,6 +97,7 @@ export function EstimateDetailPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [pricingModeOverride, setPricingModeOverride] =
     useState<EstimatePricingModeOverride | null>(null);
+  const [editMode, setEditMode] = useState(false);
 
   const item = useMemo(
     () => takeoffItems.find((row) => row.id === itemId) ?? null,
@@ -116,14 +137,33 @@ export function EstimateDetailPanel({
     });
   }, [item, materialItems, labourItems]);
 
-  const itemStatus = useMemo(
-    (): EstimateItemStatus | null =>
-      item ? deriveItemStatus(item, assembly ?? undefined, pricing ?? undefined) : null,
-    [item, assembly, pricing]
+  const pricingMode = useMemo(
+    () => resolveEstimatePricingMode(assembly ?? null, pricing ?? null, null),
+    [assembly, pricing]
   );
+
+  const itemStatus = useMemo((): EstimateItemStatus | null => {
+    if (!item) {
+      return null;
+    }
+    const calculated = calculateEstimateItemPricing({
+      takeoffItem: item,
+      materialItems,
+      labourItems,
+      pricingItem: pricing ?? null,
+      packageAssembly: assembly ?? null,
+      appliedPackage,
+    });
+    return deriveItemStatus(item, assembly ?? undefined, pricing ?? undefined, {
+      totalCost: calculated.totalCost,
+      totalSell: calculated.totalSell,
+      sellRate: calculated.sellRate,
+    });
+  }, [item, assembly, pricing, materialItems, labourItems, appliedPackage]);
 
   useEffect(() => {
     setPricingModeOverride(null);
+    setEditMode(false);
   }, [itemId]);
 
   useEffect(() => {
@@ -148,6 +188,49 @@ export function EstimateDetailPanel({
       element.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [focusSection, itemId]);
+
+  async function handleTakeoffItemSaved(updated: TakeoffItem) {
+    onTakeoffItemSaved(updated);
+    setEditMode(false);
+
+    if (!pricing) {
+      return;
+    }
+
+    const calculated = calculateEstimateItemPricing({
+      takeoffItem: updated,
+      materialItems,
+      labourItems,
+      pricingItem: pricing,
+      packageAssembly: assembly ?? null,
+      appliedPackage,
+    });
+
+    if (
+      pricingTotalsNeedSync(calculated, pricing, updated.quantity) ||
+      pricing.quantity !== updated.quantity ||
+      pricing.unit !== (updated.unit?.trim() || "each")
+    ) {
+      const result = await updatePricingItemAction(pricing.id, projectId, {
+        pricing_method: pricing.pricing_method,
+        quantity: updated.quantity,
+        unit: updated.unit?.trim() || "each",
+        cost_rate: calculated.costRate,
+        sell_rate: calculated.sellRate,
+        sell_rate_overridden: pricing.sell_rate_overridden,
+        margin_percentage: calculated.marginPercent,
+        markup_percentage: null,
+        notes: pricing.notes ?? null,
+      });
+
+      if (result.error) {
+        onError(result.error);
+        return;
+      }
+    }
+
+    dispatchEstimateUpdated(projectId);
+  }
 
   function requestPricingMode(mode: EstimatePricingModeOverride) {
     setPricingModeOverride(mode);
@@ -189,17 +272,51 @@ export function EstimateDetailPanel({
           ›
         </Button>
         <div className="min-w-0 flex-1 space-y-1.5">
-          <h3 className="text-sm font-medium leading-snug">{item.item_name}</h3>
+          <h3 className="line-clamp-2 text-sm font-medium leading-snug">
+            {item.item_name}
+          </h3>
           <p className="text-xs text-muted-foreground">
             {item.trade || "—"} · {formatQuantity(item.quantity)} {item.unit}
           </p>
-          {itemStatus ? (
-            <EstimateStatusBadge status={itemStatus} className="max-w-full" />
-          ) : null}
-          {assembly ? (
-            <p className="truncate text-xs font-medium text-emerald-800">
-              ✓ {appliedPackage?.name ?? assembly.assembly_package.name}
-            </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {itemStatus ? (
+              <EstimateStatusBadge status={itemStatus} className="max-w-full" />
+            ) : null}
+            {assembly ? (
+              <span className="inline-flex max-w-full items-center gap-1 truncate rounded-md border border-emerald-500/25 bg-emerald-500/5 px-1.5 py-0.5 text-xs font-medium text-emerald-900">
+                <span className="shrink-0 text-emerald-700" aria-hidden>
+                  ✓
+                </span>
+                <span className="truncate">
+                  {appliedPackage?.name ?? assembly.assembly_package.name}
+                </span>
+              </span>
+            ) : pricingMode !== "empty" ? (
+              <span
+                className={cn(
+                  "inline-flex rounded-md border px-1.5 py-0.5 text-xs font-medium",
+                  pricingMode === "quote" &&
+                    "border-blue-500/30 bg-blue-500/10 text-blue-800",
+                  pricingMode === "allowance" &&
+                    "border-violet-500/30 bg-violet-500/10 text-violet-800",
+                  pricingMode === "manual" &&
+                    "border-slate-500/30 bg-slate-500/10 text-slate-700"
+                )}
+              >
+                {methodLabelForMode(pricingMode)}
+              </span>
+            ) : null}
+          </div>
+          {!editMode ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => setEditMode(true)}
+            >
+              Edit item
+            </Button>
           ) : null}
         </div>
         <Button
@@ -215,6 +332,18 @@ export function EstimateDetailPanel({
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-4">
+        {editMode ? (
+          <DetailItemEditForm
+            projectId={projectId}
+            item={item}
+            documents={documents}
+            documentPages={documentPages}
+            onSaved={handleTakeoffItemSaved}
+            onCancel={() => setEditMode(false)}
+            onError={onError}
+          />
+        ) : null}
+
         <EstimateCollapsibleSection
           id="estimate-section-package"
           title="Package"
@@ -245,12 +374,13 @@ export function EstimateDetailPanel({
           id="estimate-section-materials"
           title="Materials"
           summary={materialsSummary}
-          defaultOpen={buildUp.materialLines.length > 0}
+          defaultOpen={false}
         >
           <DetailMaterialsSection
             projectId={projectId}
             takeoffItemId={item.id}
             materialItems={materialItems}
+            onOptimisticRemove={onOptimisticRemoveMaterial}
             onError={onError}
           />
         </EstimateCollapsibleSection>
@@ -259,12 +389,13 @@ export function EstimateDetailPanel({
           id="estimate-section-labour"
           title="Labour"
           summary={labourSummary}
-          defaultOpen={buildUp.labourLines.length > 0}
+          defaultOpen={false}
         >
           <DetailLabourSection
             projectId={projectId}
             takeoffItemId={item.id}
             labourItems={labourItems}
+            onOptimisticRemove={onOptimisticRemoveLabour}
             onError={onError}
           />
         </EstimateCollapsibleSection>

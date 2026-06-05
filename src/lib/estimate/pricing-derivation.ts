@@ -3,6 +3,7 @@ import {
   computeAverageMarginPercent,
   roundMoney,
 } from "@/src/lib/pricing/calculations";
+import { calculateEstimateItemPricing } from "@/src/lib/estimate/item-pricing";
 import type {
   AssemblyPackage,
   PricingItem,
@@ -60,35 +61,14 @@ export function derivePackageCostRate(input: {
   materialItems: ProjectMaterialItem[];
   labourItems: ProjectLabourItem[];
 }): number {
-  const quantity = Math.max(0, input.takeoffItem.quantity);
-
-  const materialTotal = input.materialItems
-    .filter((row) => row.takeoff_item_id === input.takeoffItem.id)
-    .reduce((sum, row) => sum + row.total_cost, 0);
-
-  const labourTotal = input.labourItems
-    .filter((row) => row.takeoff_item_id === input.takeoffItem.id)
-    .reduce((sum, row) => sum + row.total_cost, 0);
-
-  const generatedTotal = materialTotal + labourTotal;
-
-  if (quantity > 0 && generatedTotal > 0) {
-    return roundMoney(generatedTotal / quantity);
-  }
-
-  if (input.appliedPackage?.default_cost_rate != null) {
-    return input.appliedPackage.default_cost_rate;
-  }
-
-  if (input.pricing?.cost_rate != null && input.pricing.cost_rate > 0) {
-    return input.pricing.cost_rate;
-  }
-
-  if (input.assembly && input.assembly.quantity > 0) {
-    return roundMoney(input.assembly.calculated_cost / input.assembly.quantity);
-  }
-
-  return 0;
+  return calculateEstimateItemPricing({
+    takeoffItem: input.takeoffItem,
+    materialItems: input.materialItems,
+    labourItems: input.labourItems,
+    pricingItem: input.pricing,
+    packageAssembly: input.assembly,
+    appliedPackage: input.appliedPackage,
+  }).costRate;
 }
 
 export function deriveDefaultSellRate(input: {

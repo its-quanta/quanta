@@ -48,7 +48,6 @@ export type CreateTakeoffItemInput = {
 type DrawingReferenceInput = Pick<
   CreateTakeoffItemInput,
   | "source_document_id"
-  | "document_page_id"
   | "drawing_reference"
   | "page_number"
   | "sheet_number"
@@ -148,9 +147,6 @@ function appendDrawingReferenceFields(
 ) {
   const sourceDocumentId = input.source_document_id ?? null;
   target.source_document_id = sourceDocumentId;
-  target.document_page_id = sourceDocumentId
-    ? (input.document_page_id ?? null)
-    : null;
   target.drawing_reference = input.drawing_reference?.trim() || null;
   target.page_number = input.page_number ?? null;
   target.sheet_number = input.sheet_number?.trim() || null;
@@ -158,41 +154,6 @@ function appendDrawingReferenceFields(
   target.specification_reference =
     input.specification_reference?.trim() || null;
   target.confidence_score = null;
-}
-
-async function validateDocumentPageLink(
-  organisationId: string,
-  sourceDocumentId: string | null | undefined,
-  documentPageId: string | null | undefined
-): Promise<{ error?: string }> {
-  if (!documentPageId) {
-    return {};
-  }
-
-  if (!sourceDocumentId) {
-    return { error: "Select a source document before linking a page." };
-  }
-
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("document_pages")
-    .select("id, document_id")
-    .eq("id", documentPageId)
-    .eq("organisation_id", organisationId)
-    .maybeSingle();
-
-  if (error) {
-    if (error.message.includes("document_pages")) {
-      return { error: "Document page linking is not available yet." };
-    }
-    return { error: error.message };
-  }
-
-  if (!data || data.document_id !== sourceDocumentId) {
-    return { error: "Selected page does not match the source document." };
-  }
-
-  return {};
 }
 
 function buildTakeoffInsertPayloads(
@@ -243,13 +204,6 @@ function applyReviewWorkflow(
 
   if (updates.source_document_id !== undefined) {
     payload.source_document_id = updates.source_document_id;
-    if (!updates.source_document_id) {
-      payload.document_page_id = null;
-    }
-  }
-
-  if (updates.document_page_id !== undefined) {
-    payload.document_page_id = updates.document_page_id;
   }
 
   if (updates.sheet_number !== undefined) {
@@ -386,16 +340,6 @@ export async function createTakeoffItemAction(
     return { error: session.error };
   }
 
-  const pageCheck = await validateDocumentPageLink(
-    session.profile.organisation_id,
-    input.source_document_id,
-    input.document_page_id
-  );
-
-  if (pageCheck.error) {
-    return { error: pageCheck.error };
-  }
-
   const { profile } = session;
   const supabase = await createClient();
   const sortOrder = await getNextSortOrder(
@@ -462,30 +406,10 @@ export async function updateTakeoffItemAction(
     return { error: "Takeoff item not found." };
   }
 
-  const nextSourceDocumentId =
-    updates.source_document_id !== undefined
-      ? updates.source_document_id
-      : existing.source_document_id;
-  const nextDocumentPageId =
-    updates.document_page_id !== undefined
-      ? updates.document_page_id
-      : existing.document_page_id;
-
-  const pageCheck = await validateDocumentPageLink(
-    session.profile.organisation_id,
-    nextSourceDocumentId,
-    nextDocumentPageId
-  );
-
-  if (pageCheck.error) {
-    return { error: pageCheck.error };
-  }
-
   const payload = applyReviewWorkflow(existing, updates);
 
   const fieldKeys = [
     "source_document_id",
-    "document_page_id",
     "trade",
     "item_name",
     "description",
@@ -600,7 +524,6 @@ export async function duplicateTakeoffItemAction(
         quantity: source.quantity,
         unit: source.unit,
         source_document_id: source.source_document_id,
-        document_page_id: source.document_page_id,
         drawing_reference: source.drawing_reference,
         page_number: source.page_number,
         sheet_number: source.sheet_number,

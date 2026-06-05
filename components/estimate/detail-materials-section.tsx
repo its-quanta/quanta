@@ -23,6 +23,8 @@ type DetailMaterialsSectionProps = {
   projectId: string;
   takeoffItemId: string;
   materialItems: ProjectMaterialItem[];
+  onOptimisticRemove?: (itemId: string) => void;
+  onLineRemoved?: () => void;
   onError?: (message: string) => void;
   className?: string;
 };
@@ -31,6 +33,8 @@ export function DetailMaterialsSection({
   projectId,
   takeoffItemId,
   materialItems,
+  onOptimisticRemove,
+  onLineRemoved,
   onError,
   className,
 }: DetailMaterialsSectionProps) {
@@ -95,6 +99,8 @@ export function DetailMaterialsSection({
                     itemId={line.id}
                     ariaLabel={`Remove material line ${line.material_name}`}
                     onRemove={deleteProjectMaterialItemsAction}
+                    onOptimisticRemove={onOptimisticRemove}
+                    onRemoved={onLineRemoved}
                     onError={onError}
                   />
                 </div>
